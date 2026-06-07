@@ -20,6 +20,7 @@ public final class BQDefinitionRegistry {
 
     private final Map<String, ChapterDefinition> chapters = new LinkedHashMap<>();
     private final Map<UUID, String> chapterIdsByUuid = new LinkedHashMap<>();
+    private final Map<UUID, BQImportedChapterSource> importedChapterSources = new LinkedHashMap<>();
 
     // Quest index: rebuilt whenever a new chapter is registered.
     private final Map<UUID, QuestDefinition> questsByUuid = new LinkedHashMap<>();
@@ -27,6 +28,7 @@ public final class BQDefinitionRegistry {
 
     // Quest → containing chapter: rebuilt together with the quest index.
     private final Map<UUID, String> questChapterIdByUuid = new LinkedHashMap<>();
+    private final Map<UUID, UUID> importedQuestChapterByQuestUuid = new LinkedHashMap<>();
 
     // Runtime patch lists, applied in registration order during each reinject cycle.
     private final Map<UUID, List<UnaryOperator<QuestDefinition>>> questPatches = new LinkedHashMap<>();
@@ -36,22 +38,36 @@ public final class BQDefinitionRegistry {
 
     // Debug: registration metadata captured each time a quest patch was added.
     private final Map<UUID, List<BQRegistrationInfo>> questPatchRegInfo = new LinkedHashMap<>();
+    private BQFileOverrideSnapshot fileOverrideSnapshot = BQFileOverrideSnapshot.empty();
+    private Set<UUID> managedChapterUuids = Collections.emptySet();
+    private Set<UUID> managedQuestUuids = Collections.emptySet();
+    private Set<UUID> saveFilteredChapterUuids = Collections.emptySet();
+    private Set<UUID> saveFilteredQuestUuids = Collections.emptySet();
 
     public synchronized void register(ChapterDefinition chapter) {
+        BQImportedChapterSource importedSource = chapter.getImportedSource();
         ChapterDefinition value = Objects.requireNonNull(chapter, "chapter");
         String existingId = chapterIdsByUuid.get(value.getUuid());
         if (existingId != null && !existingId.equals(value.getId())) {
             chapters.remove(existingId);
             chapterRegInfo.remove(existingId);
+            importedChapterSources.remove(value.getUuid());
         }
         ChapterDefinition previous = chapters.put(value.getId(), value);
         if (previous != null && !previous.getUuid()
             .equals(value.getUuid())) {
             chapterIdsByUuid.remove(previous.getUuid());
+            importedChapterSources.remove(previous.getUuid());
         }
         chapterIdsByUuid.put(value.getUuid(), value.getId());
+        if (importedSource != null) {
+            importedChapterSources.put(value.getUuid(), importedSource);
+        } else {
+            importedChapterSources.remove(value.getUuid());
+        }
         chapterRegInfo.put(value.getId(), BQRegistrationInfo.capture());
         rebuildQuestIndex();
+        refreshDerivedViews();
     }
 
     /**
@@ -131,6 +147,43 @@ public final class BQDefinitionRegistry {
         return Collections.unmodifiableSet(new LinkedHashSet<>(questsByUuid.keySet()));
     }
 
+    public synchronized Set<UUID> getManagedChapterUuids() {
+        return managedChapterUuids;
+    }
+
+    public synchronized Set<UUID> getManagedQuestUuids() {
+        return managedQuestUuids;
+    }
+
+    public synchronized Set<UUID> getSaveFilteredChapterUuids() {
+        return saveFilteredChapterUuids;
+    }
+
+    public synchronized Set<UUID> getSaveFilteredQuestUuids() {
+        return saveFilteredQuestUuids;
+    }
+
+    public synchronized Set<UUID> getImportedChapterUuids() {
+        return Collections.unmodifiableSet(new LinkedHashSet<>(importedChapterSources.keySet()));
+    }
+
+    public synchronized Set<UUID> getImportedQuestUuids() {
+        return Collections.unmodifiableSet(new LinkedHashSet<>(importedQuestChapterByQuestUuid.keySet()));
+    }
+
+    public synchronized boolean isImportedChapter(UUID chapterUuid) {
+        return importedChapterSources.containsKey(chapterUuid);
+    }
+
+    public synchronized boolean isImportedQuest(UUID questUuid) {
+        return importedQuestChapterByQuestUuid.containsKey(questUuid);
+    }
+
+    public synchronized void setFileOverrideSnapshot(BQFileOverrideSnapshot snapshot) {
+        this.fileOverrideSnapshot = Objects.requireNonNull(snapshot, "snapshot");
+        refreshDerivedViews();
+    }
+
     /** Returns the registration info captured when the chapter with the given ID was registered. */
     public synchronized Optional<BQRegistrationInfo> getChapterRegistrationInfo(String chapterId) {
         return Optional.ofNullable(chapterRegInfo.get(chapterId));
@@ -168,12 +221,43 @@ public final class BQDefinitionRegistry {
         questsByUuid.clear();
         questsById.clear();
         questChapterIdByUuid.clear();
+        importedQuestChapterByQuestUuid.clear();
         for (ChapterDefinition chapter : chapters.values()) {
             for (QuestDefinition q : chapter.getAllQuests()) {
                 questsByUuid.put(q.getUuid(), q);
                 questsById.put(q.getId(), q);
                 questChapterIdByUuid.put(q.getUuid(), chapter.getId());
+                if (importedChapterSources.containsKey(chapter.getUuid())) {
+                    importedQuestChapterByQuestUuid.put(q.getUuid(), chapter.getUuid());
+                }
             }
         }
+    }
+
+    private void refreshDerivedViews() {
+        Set<UUID> newManagedChapters = new LinkedHashSet<>(chapterIdsByUuid.keySet());
+        for (UUID chapterUuid : fileOverrideSnapshot.getFileBackedChapterUuids()) {
+            if (importedChapterSources.containsKey(chapterUuid)) {
+                newManagedChapters.remove(chapterUuid);
+            }
+        }
+
+        Set<UUID> newManagedQuests = new LinkedHashSet<>(questsByUuid.keySet());
+        for (UUID questUuid : fileOverrideSnapshot.getFileBackedQuestUuids()) {
+            if (importedQuestChapterByQuestUuid.containsKey(questUuid)) {
+                newManagedQuests.remove(questUuid);
+            }
+        }
+
+        Set<UUID> newSaveFilteredChapters = new LinkedHashSet<>(chapterIdsByUuid.keySet());
+        newSaveFilteredChapters.removeAll(importedChapterSources.keySet());
+
+        Set<UUID> newSaveFilteredQuests = new LinkedHashSet<>(questsByUuid.keySet());
+        newSaveFilteredQuests.removeAll(importedQuestChapterByQuestUuid.keySet());
+
+        managedChapterUuids = Collections.unmodifiableSet(newManagedChapters);
+        managedQuestUuids = Collections.unmodifiableSet(newManagedQuests);
+        saveFilteredChapterUuids = Collections.unmodifiableSet(newSaveFilteredChapters);
+        saveFilteredQuestUuids = Collections.unmodifiableSet(newSaveFilteredQuests);
     }
 }

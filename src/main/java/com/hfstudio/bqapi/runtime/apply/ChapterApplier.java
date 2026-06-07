@@ -1,5 +1,6 @@
 package com.hfstudio.bqapi.runtime.apply;
 
+import java.util.Set;
 import java.util.UUID;
 
 import net.minecraft.nbt.NBTTagCompound;
@@ -17,7 +18,7 @@ import betterquesting.questing.QuestLineEntry;
 
 public final class ChapterApplier {
 
-    public void apply(ChapterDefinition definition) {
+    public void apply(ChapterDefinition definition, Set<UUID> managedQuestUuids) {
         IQuestLine chapter = QuestLineDatabase.INSTANCE.get(definition.getUuid());
         if (chapter == null) {
             chapter = QuestLineDatabase.INSTANCE.createNew(definition.getUuid());
@@ -41,6 +42,11 @@ public final class ChapterApplier {
         chapter.clear();
 
         for (QuestPlacementDefinition placement : definition.getPlacements()) {
+            if (!managedQuestUuids.contains(
+                placement.getQuest()
+                    .getUuid())) {
+                continue;
+            }
             chapter.put(
                 placement.getQuest()
                     .getUuid(),

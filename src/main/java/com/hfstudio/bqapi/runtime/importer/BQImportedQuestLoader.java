@@ -1,15 +1,19 @@
 package com.hfstudio.bqapi.runtime.importer;
 
 import java.io.BufferedReader;
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.net.JarURLConnection;
+import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.Deque;
+import java.util.Enumeration;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -18,12 +22,15 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
+import java.util.jar.JarEntry;
+import java.util.jar.JarFile;
 
 import net.minecraft.nbt.NBTTagCompound;
 import net.minecraft.nbt.NBTTagList;
 import net.minecraft.util.ResourceLocation;
 
 import com.google.gson.JsonParser;
+import com.hfstudio.bqapi.api.builder.QuestBuilder;
 import com.hfstudio.bqapi.api.builder.Quests;
 import com.hfstudio.bqapi.api.definition.ChapterDefinition;
 import com.hfstudio.bqapi.api.definition.QuestDefinition;
@@ -31,6 +38,8 @@ import com.hfstudio.bqapi.api.definition.QuestPlacementDefinition;
 import com.hfstudio.bqapi.api.definition.RawRewardDefinition;
 import com.hfstudio.bqapi.api.definition.RawTaskDefinition;
 import com.hfstudio.bqapi.api.importer.ImportedQuestFolder;
+import com.hfstudio.bqapi.runtime.BQImportedChapterSource;
+import com.hfstudio.bqapi.runtime.BQStableIdFactory;
 
 import betterquesting.api.questing.IQuest;
 import betterquesting.api.utils.NBTConverter;
@@ -77,7 +86,7 @@ public final class BQImportedQuestLoader {
             ImportedLineData line = readLine(resources, folder, lineDirectory, questFiles);
             UUID previous = resolvePreviousLineUuid(resources.readQuestLineOrder(), resources, folder, lineDirectory);
             UUID chapterUuid = explicitUuid != null ? explicitUuid
-                : uuidFromResource ? line.uuid : com.hfstudio.bqapi.runtime.BQStableIdFactory.chapter(chapterId);
+                : uuidFromResource ? line.uuid : BQStableIdFactory.chapter(chapterId);
             String orderAfterEncoded = explicitOrderAfterEncoded != null ? explicitOrderAfterEncoded
                 : previous == null ? null : UuidConverter.encodeUuid(previous);
             return toChapterDefinition(chapterId, line, chapterUuid, orderAfterEncoded, explicitIconNbt);
@@ -107,7 +116,8 @@ public final class BQImportedQuestLoader {
             iconNbt,
             line.templateNbt,
             line.placements,
-            line.extraQuests);
+            line.extraQuests,
+            new BQImportedChapterSource(line.folder, line.lineDirectory));
     }
 
     private ImportedLineData readLine(ClasspathQuestResources resources, ImportedQuestFolder folder,
@@ -174,6 +184,7 @@ public final class BQImportedQuestLoader {
         }
 
         return new ImportedLineData(
+            folder,
             lineDirectory,
             lineUuid,
             lineNbt,
@@ -189,7 +200,7 @@ public final class BQImportedQuestLoader {
         NBTTagCompound propertiesNbt = questNbt.getCompoundTag("properties");
 
         String questId = defaultQuestId(folder, lineDirectory, questUuid);
-        com.hfstudio.bqapi.api.builder.QuestBuilder builder = Quests.quest(questId)
+        QuestBuilder builder = Quests.quest(questId)
             .uuid(questUuid)
             .templateNbt(questNbt)
             .main(readBooleanProperty(propertiesNbt, "isMain", false));
@@ -339,6 +350,7 @@ public final class BQImportedQuestLoader {
 
     private static final class ImportedLineData {
 
+        private final ImportedQuestFolder folder;
         private final String lineDirectory;
         private final UUID uuid;
         private final NBTTagCompound templateNbt;
@@ -346,8 +358,10 @@ public final class BQImportedQuestLoader {
         private final List<QuestPlacementDefinition> placements;
         private final List<QuestDefinition> extraQuests;
 
-        private ImportedLineData(String lineDirectory, UUID uuid, NBTTagCompound templateNbt, NBTTagCompound iconNbt,
-            List<QuestPlacementDefinition> placements, List<QuestDefinition> extraQuests) {
+        private ImportedLineData(ImportedQuestFolder folder, String lineDirectory, UUID uuid,
+            NBTTagCompound templateNbt, NBTTagCompound iconNbt, List<QuestPlacementDefinition> placements,
+            List<QuestDefinition> extraQuests) {
+            this.folder = folder;
             this.lineDirectory = lineDirectory;
             this.uuid = uuid;
             this.templateNbt = (NBTTagCompound) templateNbt.copy();
@@ -454,7 +468,7 @@ public final class BQImportedQuestLoader {
 
         private Map<String, Boolean> listImmediateChildren(String relativeDirWithSlash) throws IOException {
             String prefix = resolve(relativeDirWithSlash);
-            java.net.URL marker = folder.getClassLoader()
+            URL marker = folder.getClassLoader()
                 .getResource(prefix);
             if (marker != null && "file".equals(marker.getProtocol())) {
                 return listFileChildren(marker);
@@ -462,15 +476,15 @@ public final class BQImportedQuestLoader {
             return listJarChildren(prefix);
         }
 
-        private Map<String, Boolean> listFileChildren(java.net.URL url) throws IOException {
+        private Map<String, Boolean> listFileChildren(URL url) throws IOException {
             try {
-                java.io.File dir = new java.io.File(url.toURI());
+                File dir = new File(url.toURI());
                 Map<String, Boolean> children = new LinkedHashMap<>();
-                java.io.File[] files = dir.listFiles();
+                File[] files = dir.listFiles();
                 if (files == null) {
                     return children;
                 }
-                for (java.io.File file : files) {
+                for (File file : files) {
                     children.put(file.getName(), file.isDirectory());
                 }
                 return children;
@@ -480,28 +494,28 @@ public final class BQImportedQuestLoader {
         }
 
         private Map<String, Boolean> listJarChildren(String prefix) throws IOException {
-            java.net.URL marker = folder.getClassLoader()
+            URL marker = folder.getClassLoader()
                 .getResource(resolve("QuestLinesOrder.txt"));
             if (marker == null) {
                 throw new IOException("Missing marker resource " + resolve("QuestLinesOrder.txt"));
             }
             if ("file".equals(marker.getProtocol())) {
                 try {
-                    java.io.File root = new java.io.File(marker.toURI()).getParentFile();
+                    File root = new File(marker.toURI()).getParentFile();
                     Map<String, Boolean> children = new LinkedHashMap<>();
-                    java.io.File dir = root;
+                    File dir = root;
                     String relative = prefix.substring(classpathRoot.length());
                     for (String segment : relative.split("/")) {
                         if (segment.isEmpty()) {
                             continue;
                         }
-                        dir = new java.io.File(dir, segment);
+                        dir = new File(dir, segment);
                     }
-                    java.io.File[] files = dir.listFiles();
+                    File[] files = dir.listFiles();
                     if (files == null) {
                         return children;
                     }
-                    for (java.io.File file : files) {
+                    for (File file : files) {
                         children.put(file.getName(), file.isDirectory());
                     }
                     return children;
@@ -510,12 +524,12 @@ public final class BQImportedQuestLoader {
                 }
             }
 
-            java.net.JarURLConnection connection = (java.net.JarURLConnection) marker.openConnection();
+            JarURLConnection connection = (JarURLConnection) marker.openConnection();
             Map<String, Boolean> children = new LinkedHashMap<>();
-            try (java.util.jar.JarFile jar = connection.getJarFile()) {
-                java.util.Enumeration<java.util.jar.JarEntry> entries = jar.entries();
+            try (JarFile jar = connection.getJarFile()) {
+                Enumeration<JarEntry> entries = jar.entries();
                 while (entries.hasMoreElements()) {
-                    java.util.jar.JarEntry entry = entries.nextElement();
+                    JarEntry entry = entries.nextElement();
                     String name = entry.getName();
                     if (!name.startsWith(prefix) || name.equals(prefix)) {
                         continue;

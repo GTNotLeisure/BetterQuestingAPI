@@ -101,7 +101,7 @@ public final class ChapterBuilder {
     public ChapterDefinition build() {
         return new ChapterDefinition(
             id,
-            uuid == null ? com.hfstudio.bqapi.runtime.BQStableIdFactory.chapter(id) : uuid,
+            uuid == null ? BQStableIdFactory.chapter(id) : uuid,
             orderAfterEncoded,
             iconNbt,
             templateNbt,

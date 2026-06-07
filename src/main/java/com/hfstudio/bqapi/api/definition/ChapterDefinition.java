@@ -11,6 +11,7 @@ import java.util.UUID;
 import net.minecraft.nbt.NBTTagCompound;
 
 import com.hfstudio.bqapi.BQApiLangKeys;
+import com.hfstudio.bqapi.runtime.BQImportedChapterSource;
 import com.hfstudio.bqapi.runtime.BQStableIdFactory;
 
 public final class ChapterDefinition {
@@ -23,18 +24,33 @@ public final class ChapterDefinition {
     private final List<QuestPlacementDefinition> placements;
     private final List<QuestDefinition> extraQuests;
     private final List<QuestDefinition> allQuests;
+    private final BQImportedChapterSource importedSource;
 
     public ChapterDefinition(String id, String orderAfterEncoded, List<QuestPlacementDefinition> placements) {
-        this(id, BQStableIdFactory.chapter(id), orderAfterEncoded, null, null, placements, Collections.emptyList());
+        this(
+            id,
+            BQStableIdFactory.chapter(id),
+            orderAfterEncoded,
+            null,
+            null,
+            placements,
+            Collections.emptyList(),
+            null);
     }
 
     public ChapterDefinition(String id, UUID uuid, String orderAfterEncoded, NBTTagCompound iconNbt,
         NBTTagCompound templateNbt, List<QuestPlacementDefinition> placements) {
-        this(id, uuid, orderAfterEncoded, iconNbt, templateNbt, placements, Collections.emptyList());
+        this(id, uuid, orderAfterEncoded, iconNbt, templateNbt, placements, Collections.emptyList(), null);
     }
 
     public ChapterDefinition(String id, UUID uuid, String orderAfterEncoded, NBTTagCompound iconNbt,
         NBTTagCompound templateNbt, List<QuestPlacementDefinition> placements, List<QuestDefinition> extraQuests) {
+        this(id, uuid, orderAfterEncoded, iconNbt, templateNbt, placements, extraQuests, null);
+    }
+
+    public ChapterDefinition(String id, UUID uuid, String orderAfterEncoded, NBTTagCompound iconNbt,
+        NBTTagCompound templateNbt, List<QuestPlacementDefinition> placements, List<QuestDefinition> extraQuests,
+        BQImportedChapterSource importedSource) {
         this.id = Objects.requireNonNull(id, "id");
         this.uuid = Objects.requireNonNull(uuid, "uuid");
         this.orderAfterEncoded = orderAfterEncoded;
@@ -55,6 +71,7 @@ public final class ChapterDefinition {
             questIndex.putIfAbsent(quest.getUuid(), quest);
         }
         this.allQuests = Collections.unmodifiableList(new ArrayList<>(questIndex.values()));
+        this.importedSource = importedSource;
     }
 
     public String getId() {
@@ -87,6 +104,10 @@ public final class ChapterDefinition {
 
     public List<QuestDefinition> getAllQuests() {
         return allQuests;
+    }
+
+    public BQImportedChapterSource getImportedSource() {
+        return importedSource;
     }
 
     public String getNameLangKey() {

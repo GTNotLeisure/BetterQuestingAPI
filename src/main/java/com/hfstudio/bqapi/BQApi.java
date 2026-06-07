@@ -16,6 +16,7 @@ import com.hfstudio.bqapi.api.definition.QuestDefinition;
 import com.hfstudio.bqapi.api.importer.ImportedQuestFolder;
 import com.hfstudio.bqapi.api.importer.ImportedQuestFolders;
 import com.hfstudio.bqapi.runtime.BQDefinitionRegistry;
+import com.hfstudio.bqapi.runtime.BQFileBackedOverrideResolver;
 import com.hfstudio.bqapi.runtime.BQRegistrationInfo;
 import com.hfstudio.bqapi.runtime.BQReloaderRegistry;
 import com.hfstudio.bqapi.runtime.BQRuntimeApplier;
@@ -126,6 +127,22 @@ public final class BQApi {
 
     public static Set<UUID> getRegisteredQuestUuids() {
         return REGISTRY.getRegisteredQuestUuids();
+    }
+
+    public static Set<UUID> getManagedChapterUuids() {
+        return REGISTRY.getManagedChapterUuids();
+    }
+
+    public static Set<UUID> getManagedQuestUuids() {
+        return REGISTRY.getManagedQuestUuids();
+    }
+
+    public static Set<UUID> getSaveFilteredChapterUuids() {
+        return REGISTRY.getSaveFilteredChapterUuids();
+    }
+
+    public static Set<UUID> getSaveFilteredQuestUuids() {
+        return REGISTRY.getSaveFilteredQuestUuids();
     }
 
     /** Returns an unmodifiable view of all registered {@link ChapterDefinition}s. */
@@ -267,6 +284,7 @@ public final class BQApi {
     public static void reinject(MinecraftServer server) {
         // Invoke reload participants first so they can update registrations dynamically.
         RELOADER_REGISTRY.invokeAll();
+        REGISTRY.setFileOverrideSnapshot(new BQFileBackedOverrideResolver().resolve(REGISTRY));
         new BQRuntimeApplier(REGISTRY).applyAll(server);
     }
 }

@@ -28,7 +28,7 @@ public abstract class MixinSaveLoadHandler {
             target = "Lbetterquesting/questing/QuestDatabase;writeToNBT(Lnet/minecraft/nbt/NBTTagList;Ljava/util/List;)Lnet/minecraft/nbt/NBTTagList;"))
     private NBTTagList hfstudio$bqapi$filterQuestNbtForWorldSave(QuestDatabase instance, NBTTagList nbt,
         List<UUID> subset) {
-        return instance.writeToNBT(nbt, filteredSubset(subset, BQApi.getRegisteredQuestUuids(), instance.keySet()));
+        return instance.writeToNBT(nbt, filteredSubset(subset, BQApi.getSaveFilteredQuestUuids(), instance.keySet()));
     }
 
     @Redirect(
@@ -38,7 +38,7 @@ public abstract class MixinSaveLoadHandler {
             target = "Lbetterquesting/questing/QuestLineDatabase;writeToNBT(Lnet/minecraft/nbt/NBTTagList;Ljava/util/List;)Lnet/minecraft/nbt/NBTTagList;"))
     private NBTTagList hfstudio$bqapi$filterQuestLineNbtForWorldSave(QuestLineDatabase instance, NBTTagList nbt,
         List<UUID> subset) {
-        return instance.writeToNBT(nbt, filteredSubset(subset, BQApi.getRegisteredChapterUuids(), instance.keySet()));
+        return instance.writeToNBT(nbt, filteredSubset(subset, BQApi.getSaveFilteredChapterUuids(), instance.keySet()));
     }
 
     private static List<UUID> filteredSubset(List<UUID> subset, Set<UUID> managedUuids, Set<UUID> allAvailable) {

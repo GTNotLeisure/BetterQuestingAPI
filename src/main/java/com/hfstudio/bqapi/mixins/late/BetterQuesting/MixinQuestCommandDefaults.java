@@ -36,13 +36,13 @@ public abstract class MixinQuestCommandDefaults {
             target = "Lbetterquesting/questing/QuestLineDatabase;getOrderedEntries()Ljava/util/List;"))
     private static List<Map.Entry<UUID, betterquesting.api.questing.IQuestLine>> hfstudio$bqapi$filterQuestLinesForSave(
         QuestLineDatabase instance) {
-        Set<UUID> managedChapterUuids = BQApi.getRegisteredChapterUuids();
-        if (managedChapterUuids.isEmpty()) {
+        Set<UUID> filteredChapterUuids = BQApi.getSaveFilteredChapterUuids();
+        if (filteredChapterUuids.isEmpty()) {
             return instance.getOrderedEntries();
         }
         return instance.getOrderedEntries()
             .stream()
-            .filter(entry -> !managedChapterUuids.contains(entry.getKey()))
+            .filter(entry -> !filteredChapterUuids.contains(entry.getKey()))
             .collect(Collectors.toCollection(ArrayList::new));
     }
 
@@ -51,13 +51,13 @@ public abstract class MixinQuestCommandDefaults {
         at = @At(value = "INVOKE", target = "Lbetterquesting/questing/QuestDatabase;entrySet()Ljava/util/Set;"))
     private static Set<Map.Entry<UUID, betterquesting.api.questing.IQuest>> hfstudio$bqapi$filterQuestsForSave(
         QuestDatabase instance) {
-        Set<UUID> managedQuestUuids = BQApi.getRegisteredQuestUuids();
-        if (managedQuestUuids.isEmpty()) {
+        Set<UUID> filteredQuestUuids = BQApi.getSaveFilteredQuestUuids();
+        if (filteredQuestUuids.isEmpty()) {
             return instance.entrySet();
         }
         return instance.entrySet()
             .stream()
-            .filter(entry -> !managedQuestUuids.contains(entry.getKey()))
+            .filter(entry -> !filteredQuestUuids.contains(entry.getKey()))
             .collect(Collectors.toCollection(LinkedHashSet::new));
     }
 
@@ -68,7 +68,7 @@ public abstract class MixinQuestCommandDefaults {
             target = "Lbetterquesting/questing/QuestDatabase;writeToNBT(Lnet/minecraft/nbt/NBTTagList;Ljava/util/List;)Lnet/minecraft/nbt/NBTTagList;"))
     private static NBTTagList hfstudio$bqapi$filterQuestNbtForSaveLegacy(QuestDatabase instance, NBTTagList nbt,
         List<UUID> subset) {
-        return instance.writeToNBT(nbt, filteredSubset(subset, BQApi.getRegisteredQuestUuids(), instance.keySet()));
+        return instance.writeToNBT(nbt, filteredSubset(subset, BQApi.getSaveFilteredQuestUuids(), instance.keySet()));
     }
 
     @Redirect(
@@ -78,7 +78,7 @@ public abstract class MixinQuestCommandDefaults {
             target = "Lbetterquesting/questing/QuestLineDatabase;writeToNBT(Lnet/minecraft/nbt/NBTTagList;Ljava/util/List;)Lnet/minecraft/nbt/NBTTagList;"))
     private static NBTTagList hfstudio$bqapi$filterQuestLineNbtForSaveLegacy(QuestLineDatabase instance, NBTTagList nbt,
         List<UUID> subset) {
-        return instance.writeToNBT(nbt, filteredSubset(subset, BQApi.getRegisteredChapterUuids(), instance.keySet()));
+        return instance.writeToNBT(nbt, filteredSubset(subset, BQApi.getSaveFilteredChapterUuids(), instance.keySet()));
     }
 
     @Inject(method = "load(Lnet/minecraft/command/ICommandSender;Ljava/lang/String;Ljava/io/File;Z)V", at = @At("TAIL"))

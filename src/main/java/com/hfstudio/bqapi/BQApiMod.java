@@ -13,6 +13,7 @@ import cpw.mods.fml.common.event.FMLServerStartingEvent;
     name = "HFStudio BetterQuesting Runtime API",
     version = BQApiMod.VERSION,
     dependencies = "after:betterquesting;",
+    acceptableRemoteVersions = "*",
     acceptedMinecraftVersions = "1.7.10")
 public class BQApiMod {
 

@@ -2,6 +2,7 @@ package com.hfstudio.bqapi.runtime.apply;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.UUID;
 
 import net.minecraft.nbt.NBTTagCompound;
 
@@ -64,7 +65,7 @@ public final class QuestApplier {
         applyRewards(quest, rewardApplier.buildRewards(definition.getRewards()));
 
         quest.setRequirements(definition.getPrerequisites());
-        for (java.util.UUID requirement : definition.getPrerequisites()) {
+        for (UUID requirement : definition.getPrerequisites()) {
             quest.setRequirementType(requirement, definition.getRequirementType(requirement));
         }
     }

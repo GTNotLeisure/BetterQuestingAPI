@@ -3,6 +3,7 @@ package com.hfstudio.bqapi.runtime;
 import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 import net.minecraft.server.MinecraftServer;
@@ -27,9 +28,14 @@ public final class BQRuntimeApplier {
         Collection<ChapterDefinition> chapters = registry.getChapters();
         Map<UUID, QuestDefinition> quests = new LinkedHashMap<>();
         Map<UUID, Boolean> questPatched = new LinkedHashMap<>();
+        Set<UUID> managedQuestUuids = registry.getManagedQuestUuids();
+        Set<UUID> managedChapterUuids = registry.getManagedChapterUuids();
 
         for (ChapterDefinition chapter : chapters) {
             for (QuestDefinition originalQuest : chapter.getAllQuests()) {
+                if (!managedQuestUuids.contains(originalQuest.getUuid())) {
+                    continue;
+                }
                 // Apply any runtime patches registered by callers; patches do not
                 // modify the original registered data and are only effective in this apply run.
                 QuestDefinition quest = registry.applyPatchesTo(originalQuest);
@@ -44,7 +50,10 @@ public final class BQRuntimeApplier {
         }
 
         for (ChapterDefinition chapter : chapters) {
-            chapterApplier.apply(chapter);
+            if (!managedChapterUuids.contains(chapter.getUuid())) {
+                continue;
+            }
+            chapterApplier.apply(chapter, managedQuestUuids);
         }
     }
 }
