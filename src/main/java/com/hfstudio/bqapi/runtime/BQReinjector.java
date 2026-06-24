@@ -11,7 +11,7 @@ import betterquesting.network.handlers.NetChapterSync;
 import betterquesting.network.handlers.NetQuestSync;
 import betterquesting.network.handlers.NetSettingSync;
 
-public final class BQReinjector {
+public class BQReinjector {
 
     private static final long DEBOUNCE_MS = 50L;
     private static final AtomicLong lastReinjectMs = new AtomicLong(0L);
@@ -32,6 +32,7 @@ public final class BQReinjector {
         }
 
         BQApi.reinject(server);
+        BQManagedQuestProgress.replay();
         NetSettingSync.sendSync(null);
         NetQuestSync.quickSync(null, true, true);
         NetChapterSync.sendSync(null, null);

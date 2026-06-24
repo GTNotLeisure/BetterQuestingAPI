@@ -10,7 +10,7 @@ import cpw.mods.fml.common.event.FMLServerStartingEvent;
 
 @Mod(
     modid = BQApiMod.MODID,
-    name = "HFStudio BetterQuesting Runtime API",
+    name = "BetterQuesting Runtime API",
     version = BQApiMod.VERSION,
     dependencies = "after:betterquesting;",
     acceptableRemoteVersions = "*",

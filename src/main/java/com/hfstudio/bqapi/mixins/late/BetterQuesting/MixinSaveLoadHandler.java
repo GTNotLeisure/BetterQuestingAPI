@@ -10,9 +10,12 @@ import net.minecraft.nbt.NBTTagList;
 
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
+import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.Redirect;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import com.hfstudio.bqapi.BQApi;
+import com.hfstudio.bqapi.runtime.BQManagedQuestProgress;
 
 import betterquesting.handlers.SaveLoadHandler;
 import betterquesting.questing.QuestDatabase;
@@ -20,6 +23,11 @@ import betterquesting.questing.QuestLineDatabase;
 
 @Mixin(value = SaveLoadHandler.class, remap = false)
 public abstract class MixinSaveLoadHandler {
+
+    @Inject(method = "loadProgress()V", at = @At("HEAD"))
+    private void hfstudio$bqapi$resetManagedProgressCapture(CallbackInfo ci) {
+        BQManagedQuestProgress.reset();
+    }
 
     @Redirect(
         method = "saveConfig()Ljava/util/concurrent/Future;",
@@ -53,5 +61,16 @@ public abstract class MixinSaveLoadHandler {
         return subset.stream()
             .filter(id -> !managedUuids.contains(id))
             .collect(Collectors.toCollection(ArrayList::new));
+    }
+
+    @Redirect(
+        method = "loadProgress()V",
+        at = @At(
+            value = "INVOKE",
+            target = "Lbetterquesting/questing/QuestDatabase;readProgressFromNBT(Lnet/minecraft/nbt/NBTTagList;Z)V"))
+    private void hfstudio$bqapi$captureManagedProgressOnLoad(QuestDatabase instance, NBTTagList progressList,
+        boolean merge) {
+        BQManagedQuestProgress.capture(progressList, merge);
+        instance.readProgressFromNBT(progressList, merge);
     }
 }
