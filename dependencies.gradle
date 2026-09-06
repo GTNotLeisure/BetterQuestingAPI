@@ -1,6 +1,15 @@
 dependencies {
-    implementation("com.github.GTNewHorizons:GTNHLib:0.9.50:dev")
-    devOnlyNonPublishable("com.github.GTNewHorizons:BetterQuesting:3.8.35-GTNH:dev")
-    testImplementation("com.github.GTNewHorizons:BetterQuesting:3.8.32-GTNH:dev")
+    implementation("com.github.GTNewHorizons:GTNHLib:0.11.46:dev")
+    devOnlyNonPublishable("com.github.GTNewHorizons:BetterQuesting:3.8.84-GTNH:dev")
+    testImplementation("com.github.GTNewHorizons:BetterQuesting:3.8.84-GTNH:dev")
     testImplementation("junit:junit:4.13.2")
+
+    // jvmDowngrader
+    compileOnly("javax.xml.bind:jaxb-api:2.3.1")
+    compileOnly("org.jetbrains:annotations:26.0.1")
+    compileOnly("org.projectlombok:lombok:1.18.42") { transitive = false }
+    annotationProcessor("org.projectlombok:lombok:1.18.42")
+
+    implementation("com.google.auto.value:auto-value-annotations:1.10.4")
+    annotationProcessor("com.google.auto.value:auto-value:1.10.4")
 }
