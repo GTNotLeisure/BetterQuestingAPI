@@ -75,7 +75,7 @@ import com.hfstudio.bqapi.api.definition.ChapterDefinition;
 import com.hfstudio.bqapi.api.definition.QuestDefinition;
 import com.hfstudio.bqapi.api.definition.QuestPlacementDefinition;
 
-public final class ExampleQuestRegistration {
+public class ExampleQuestRegistration {
 
 	public static void registerAll() {
 		QuestDefinition starterQuest = Quests.quest("starter_collect_logs")
@@ -129,8 +129,7 @@ ChapterDefinition myChapter = Chapters.chapter("my_new_chapter")
 	.build();
 ```
 
-For a detailed guide on chapter ordering and troubleshooting quest registration,
-see [CHAPTER_ORDERING_GUIDE.md](CHAPTER_ORDERING_GUIDE.md).
+Keep chapter IDs stable across reloads so their ordering and references remain consistent.
 
 ### 2. Import Quest Resources
 
@@ -139,7 +138,7 @@ You can import chapters from resources under your own assets path.
 ```java
 import com.hfstudio.bqapi.BQApi;
 
-public final class ExampleImportRegistration {
+public class ExampleImportRegistration {
 
 	public static void registerImported() {
 		BQApi.registerImportedFolder("yourmodid", "bqapi/quests");
@@ -158,7 +157,17 @@ For advanced control (custom classloader, explicit line directory, UUID behavior
 
 ### 3. Runtime Reinjection
 
-Default runtime reinjection on server start is handled by [src/main/java/com/hfstudio/bqapi/BQApiMod.java](src/main/java/com/hfstudio/bqapi/BQApiMod.java).
+World loading is integrated by `MixinSaveLoadHandler`: registered definitions are applied before BetterQuesting reads legacy or per-player progress. `BQApiMod` registers the debug command; there is no second server-started reinjection.
+
+Call `BQApi.reinject(server)` on the active server thread. It runs reload callbacks, captures the registration snapshot, prepares definitions, restores deferred managed progress, and synchronizes only the managed quest and chapter UUIDs. Quest configuration and each player's progress travel together. Players who join later use BetterQuesting's normal login synchronization. The integrated host shares the server database and does not receive a redundant database packet.
+
+An explicit `/bq_admin default load` still replaces the full database. BQAPI inserts its definitions before that command's existing synchronization, without sending another round of packets. Ordinary reinjection does not broadcast settings or clear unrelated quests.
+
+Use explicit `.slot(n)` values for tasks and rewards whose progress must remain stable when definitions are reordered. Automatic slots are assigned only after all explicit slots are reserved.
+
+Registration queries return immutable snapshots. Reload callbacks and patches run outside registry locks; callbacks added during iteration run on a later cycle. Patches must retain the original quest ID and UUID. Use raw task/reward definitions to support BetterQuesting extension factories, or inject custom appliers with the runtime constructors.
+
+Database update notifications still exist in BetterQuesting. A third-party listener must distinguish a UI/data update from a world load and must not clear or recreate quests on every update. BQAPI cannot preserve progress that an external callback explicitly deletes.
 
 If your mod dynamically changes quest definitions after startup, trigger reinjection:
 
@@ -207,8 +216,8 @@ import com.hfstudio.bqapi.api.builder.TaskBuilders;
 // Append an extra retrieval task to a quest registered by another mod
 BQApi.patchQuest("othermod.some_quest", def ->
 	Quests.copyOf(def)
-		.task(TaskBuilders.retrieval()
-			.item("minecraft:diamond", 1)
+		.task(TaskBuilders.retrieval("extra_diamond")
+			.item("minecraft:diamond", 1, 0)
 			.build())
 		.build());
 ```
@@ -227,7 +236,7 @@ import com.hfstudio.bqapi.BQApi;
 import com.hfstudio.bqapi.api.QuestReloadService;
 import cpw.mods.fml.common.Loader;
 
-public final class MyQuestReloadService implements QuestReloadService {
+public class MyQuestReloadService implements QuestReloadService {
 
 	@Override
 	public void reloadQuest() {
@@ -411,19 +420,19 @@ devOnlyNonPublishable("com.github.GTNewHorizons:BetterQuesting:3.x.x-GTNH:dev")
 
 #### Step 5: Keep your mod's own mixin injection
 
-Because the shadow method does not bundle the BetterQuestingAPI main mod's mixin, your mod **must retain its own mixin injection**, for example:
+The shadow artifact excludes lifecycle mixins. Supply exactly one integration for both world loading and explicit default reloads, using the current `MixinSaveLoadHandler` and `MixinQuestCommandDefaults` implementations:
 
 ```java
-// Keep com.<yourmod>.mixins.late.BetterQuesting.MixinQuestCommandDefaults
-// It injects into QuestCommandDefaults.load() and loadLegacy()
-// BQReinjector is available because it was shadow-merged from the api jar
+// Install the current MixinSaveLoadHandler and MixinQuestCommandDefaults integrations.
+// Materialize definitions before world progress loading.
+// Apply explicit reloads before their existing synchronization.
 ```
 
 Keep the corresponding enum entry in `Mixins.java` unchanged:
 
 ```java
 BETTER_QUESTING_RUNTIME(new MixinBuilder("BetterQuesting Runtime API Mixins")
-    .addCommonMixins("BetterQuesting.MixinQuestCommandDefaults")
+    .addCommonMixins("BetterQuesting.MixinSaveLoadHandler", "BetterQuesting.MixinQuestCommandDefaults")
     .setPhase(Phase.LATE)
     .addRequiredMod(ModList.BetterQuesting)),
 ```
@@ -464,7 +473,7 @@ And remove the corresponding enum entry from `Mixins.java`:
 ```java
 // Remove this entire block
 BETTER_QUESTING_RUNTIME(new MixinBuilder("BetterQuesting Runtime API Mixins")
-    .addCommonMixins("BetterQuesting.MixinQuestCommandDefaults")
+    .addCommonMixins("BetterQuesting.MixinSaveLoadHandler", "BetterQuesting.MixinQuestCommandDefaults")
     .setPhase(Phase.LATE)
     .addRequiredMod(ModList.BetterQuesting)),
 ```
@@ -487,17 +496,16 @@ This ensures FML loads BetterQuestingAPI before your mod.
 
 ### API Initialization Notes
 
-BetterQuestingAPI's initialization (including the `@Mod.EventHandler onServerStarted` reinject trigger) **only runs when the main mod jar's `BQApiMod` is loaded**.
+The main mod owns the lifecycle integration and requires BetterQuesting. Embedded API users must supply the equivalent lifecycle hooks exactly once:
 
-| Method | API classes available | Mixin active | `BQApiMod` present |
-|--------|-----------------------|--------------|---------------------|
-| Shadow embed | ✅ | ✅ (your mod's own mixin) | ❌ (your mixin handles reinject) |
-| External mod dep | ✅ | ✅ (managed by BetterQuestingAPI) | ✅ |
+| Hook | Runtime call |
+|------|--------------|
+| Before world database loading | `BQApi.getRuntime().beginWorldLoad(server)` |
+| Immediately before world progress loading | `BQApi.getRuntime().beforeWorldProgress(server)` |
+| After an explicit database reload, before its normal sync | `BQApi.getRuntime().afterDatabaseLoad(server)` |
+| After world database unload | `BQApi.getRuntime().unload()` |
 
-> With shadow embed, the reinject trigger depends on your mod's mixin (which injects `QuestCommandDefaults.load` / `loadLegacy`). BetterQuestingAPI's own event subscription will not run.
-> With external mod dependency, everything is delegated to BetterQuestingAPI — no additional setup needed.
-
----
+These hooks run on the server thread. `BQReinjector.reinject(server)` remains a compatibility alias for `BQApi.reinject(server)`. When using the main mod, downstream mods only register definitions and callbacks.
 
 ### Multi-Mod Coexistence Compatibility
 
@@ -514,24 +522,15 @@ This means:
 
 > **Version mismatch risk**: If mod A shadows version 1.0.0 and mod B shadows version 1.1.0, whichever loads first wins. The other mod silently uses the older API. Always keep all shadow copies on the same version.
 
-#### Double Mixin Injection
+#### Duplicate Lifecycle Integrations
 
-If the main BetterQuestingAPI jar is present AND a shadow-embedding mod still registers its own `MixinQuestCommandDefaults`, **both mixins are applied to `QuestCommandDefaults.load()` / `loadLegacy()`**. This means `BQReinjector.reinject()` is called twice in rapid succession.
+Use one lifecycle integration. Multiple copies of the same redirect can conflict during Mixin application, and sequential duplicate callbacks can repeat external side effects.
 
-As of the current implementation `BQReinjector` includes a **50 ms debounce**: any second call arriving within 50 ms of the first is silently dropped. The apply logic (`ChapterApplier` / `QuestApplier`) is also idempotent (UUID-keyed get-or-create + overwrite), so even if the debounce were absent the result would be the same data written twice.
-
-Practical result:
-
-| Scenario | Class conflict | Double reinject | Functional result |
-|----------|---------------|-----------------|-------------------|
-| Main jar + one shadow mod | ❌ (classloader deduplicates) | Debounced away | ✅ Correct |
-| Main jar + two shadow mods | ❌ | Debounced away | ✅ Correct |
-| Two shadow mods, no main jar | ❌ | Debounced away | ✅ Correct |
-| Version mismatch between jars | ❌ classes, but wrong version | — | ⚠️ Unpredictable |
+Reentrant reinjection requests are folded into the active cycle. Completed calls are not suppressed by elapsed time: a second real database reload must always be applied. Reload callbacks must be idempotent. Classloader deduplication does not guarantee compatibility between different embedded API versions.
 
 #### Recommendation
 
 For the cleanest setup in a modpack that ships BetterQuestingAPI as a standalone mod:
 - Use **Method B (external mod dependency)** for all downstream mods.
-- Remove each mod's own `MixinQuestCommandDefaults` copy; the main mod jar handles it.
-- There will be exactly one mixin injection per method and one `reinject` call. No debounce needed.
+- Remove downstream lifecycle mixin copies; the main mod jar handles world loading and default reloads.
+- Use the main mod as the single owner of each loading phase.

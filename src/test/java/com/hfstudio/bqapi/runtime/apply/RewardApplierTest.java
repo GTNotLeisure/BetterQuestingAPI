@@ -4,6 +4,8 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
 import java.util.Collections;
+import java.util.Map;
+import java.util.UUID;
 
 import net.minecraft.client.gui.GuiScreen;
 import net.minecraft.entity.player.EntityPlayer;
@@ -46,7 +48,7 @@ public class RewardApplierTest {
         assertEquals("from_raw_reward", ((TestReward) reward).marker);
     }
 
-    private static final class TestRewardFactory implements IFactoryData<IReward, NBTTagCompound> {
+    private static class TestRewardFactory implements IFactoryData<IReward, NBTTagCompound> {
 
         private static final TestRewardFactory INSTANCE = new TestRewardFactory();
 
@@ -68,7 +70,7 @@ public class RewardApplierTest {
         }
     }
 
-    private static final class TestReward implements IReward {
+    private static class TestReward implements IReward {
 
         private String marker = "";
 
@@ -83,20 +85,20 @@ public class RewardApplierTest {
         }
 
         @Override
-        public boolean canClaim(EntityPlayer player, java.util.Map.Entry<java.util.UUID, IQuest> quest) {
+        public boolean canClaim(EntityPlayer player, Map.Entry<UUID, IQuest> quest) {
             return true;
         }
 
         @Override
-        public void claimReward(EntityPlayer player, java.util.Map.Entry<java.util.UUID, IQuest> quest) {}
+        public void claimReward(EntityPlayer player, Map.Entry<UUID, IQuest> quest) {}
 
         @Override
-        public IGuiPanel getRewardGui(IGuiRect rect, java.util.Map.Entry<java.util.UUID, IQuest> quest) {
+        public IGuiPanel getRewardGui(IGuiRect rect, Map.Entry<UUID, IQuest> quest) {
             return null;
         }
 
         @Override
-        public GuiScreen getRewardEditor(GuiScreen parent, java.util.Map.Entry<java.util.UUID, IQuest> quest) {
+        public GuiScreen getRewardEditor(GuiScreen parent, Map.Entry<UUID, IQuest> quest) {
             return null;
         }
 

@@ -1,12 +1,15 @@
+import org.gradle.jvm.tasks.Jar
+
 plugins {
     id("com.gtnewhorizons.gtnhconvention")
 }
 
 tasks.withType<JavaCompile>().configureEach {
+    options.encoding = "UTF-8"
     options.annotationProcessorPath = configurations.annotationProcessor.get()
 }
 
-val bqApiJar by tasks.registering(org.gradle.jvm.tasks.Jar::class) {
+val bqApiJar by tasks.registering(Jar::class) {
     group = "build"
     description = "Builds an API-only jar without @Mod bootstrap and mixin implementation classes."
     archiveClassifier.set("api")

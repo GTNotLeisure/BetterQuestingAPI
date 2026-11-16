@@ -8,7 +8,7 @@ import net.minecraft.util.ResourceLocation;
 import com.hfstudio.bqapi.api.builder.TaskBuilder;
 import com.hfstudio.bqapi.api.definition.RawTaskDefinition;
 
-public final class RawTaskBuilder extends TaskBuilder<RawTaskDefinition, RawTaskBuilder> {
+public class RawTaskBuilder extends TaskBuilder<RawTaskDefinition, RawTaskBuilder> {
 
     private ResourceLocation factoryId;
     private NBTTagCompound configNbt = new NBTTagCompound();

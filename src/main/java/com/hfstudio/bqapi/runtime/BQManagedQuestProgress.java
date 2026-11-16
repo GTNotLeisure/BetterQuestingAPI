@@ -33,6 +33,9 @@ public class BQManagedQuestProgress {
     }
 
     public static synchronized void capture(NBTTagList progressList, boolean merge) {
+        if (!merge) {
+            pendingBatches.clear();
+        }
         if (progressList == null || progressList.tagCount() <= 0) {
             return;
         }
@@ -41,7 +44,7 @@ public class BQManagedQuestProgress {
         for (int i = 0; i < count; i++) {
             NBTTagCompound questProgress = progressList.getCompoundTagAt(i);
             Optional<UUID> questUuid = readQuestUuid(questProgress);
-            if (!questUuid.isPresent()) {
+            if (!questUuid.isPresent() || QuestDatabase.INSTANCE.containsKey(questUuid.get())) {
                 continue;
             }
             capturedProgress.appendTag((NBTBase) questProgress.copy());
@@ -53,10 +56,13 @@ public class BQManagedQuestProgress {
     }
 
     public static synchronized void replay() {
+        replay(BQApi.getManagedQuestUuids());
+    }
+
+    public static synchronized void replay(Set<UUID> managedQuestUuids) {
         if (pendingBatches.isEmpty()) {
             return;
         }
-        Set<UUID> managedQuestUuids = BQApi.getManagedQuestUuids();
         if (managedQuestUuids.isEmpty()) {
             pendingBatches.clear();
             return;
@@ -173,14 +179,5 @@ public class BQManagedQuestProgress {
         } catch (IllegalArgumentException ignored) {}
     }
 
-    private static class ProgressBatch {
-
-        private final NBTTagList progressList;
-        private final boolean merge;
-
-        private ProgressBatch(NBTTagList progressList, boolean merge) {
-            this.progressList = progressList;
-            this.merge = merge;
-        }
-    }
+    private record ProgressBatch(NBTTagList progressList, boolean merge) {}
 }

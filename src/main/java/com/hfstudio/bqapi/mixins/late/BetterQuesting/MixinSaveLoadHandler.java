@@ -1,21 +1,21 @@
 package com.hfstudio.bqapi.mixins.late.BetterQuesting;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
-import java.util.stream.Collectors;
 
 import net.minecraft.nbt.NBTTagList;
+import net.minecraft.server.MinecraftServer;
 
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
+import com.google.common.collect.ImmutableSet;
 import com.hfstudio.bqapi.BQApi;
-import com.hfstudio.bqapi.runtime.BQManagedQuestProgress;
 
 import betterquesting.handlers.SaveLoadHandler;
 import betterquesting.questing.QuestDatabase;
@@ -24,9 +24,24 @@ import betterquesting.questing.QuestLineDatabase;
 @Mixin(value = SaveLoadHandler.class, remap = false)
 public abstract class MixinSaveLoadHandler {
 
-    @Inject(method = "loadProgress()V", at = @At("HEAD"))
-    private void hfstudio$bqapi$resetManagedProgressCapture(CallbackInfo ci) {
-        BQManagedQuestProgress.reset();
+    @Inject(method = "loadDatabases(Lnet/minecraft/server/MinecraftServer;)V", at = @At("HEAD"))
+    private void hfstudio$bqapi$beginWorldLoad(MinecraftServer server, CallbackInfo ci) {
+        BQApi.getRuntime()
+            .beginWorldLoad(server);
+    }
+
+    @Inject(
+        method = "loadDatabases(Lnet/minecraft/server/MinecraftServer;)V",
+        at = @At(value = "INVOKE", target = "Lbetterquesting/handlers/SaveLoadHandler;loadProgress()V"))
+    private void hfstudio$bqapi$populateBeforeProgress(MinecraftServer server, CallbackInfo ci) {
+        BQApi.getRuntime()
+            .beforeWorldProgress(server);
+    }
+
+    @Inject(method = "unloadDatabases()V", at = @At("TAIL"))
+    private void hfstudio$bqapi$unloadRuntime(CallbackInfo ci) {
+        BQApi.getRuntime()
+            .unload();
     }
 
     @Redirect(
@@ -49,28 +64,18 @@ public abstract class MixinSaveLoadHandler {
         return instance.writeToNBT(nbt, filteredSubset(subset, BQApi.getSaveFilteredChapterUuids(), instance.keySet()));
     }
 
+    @Unique
     private static List<UUID> filteredSubset(List<UUID> subset, Set<UUID> managedUuids, Set<UUID> allAvailable) {
         if (managedUuids.isEmpty()) {
             return subset;
         }
-        if (subset == null) {
-            return allAvailable.stream()
-                .filter(id -> !managedUuids.contains(id))
-                .collect(Collectors.toCollection(ArrayList::new));
+        ImmutableSet.Builder<UUID> result = ImmutableSet.builder();
+        for (UUID uuid : subset == null ? allAvailable : subset) {
+            if (!managedUuids.contains(uuid)) {
+                result.add(uuid);
+            }
         }
-        return subset.stream()
-            .filter(id -> !managedUuids.contains(id))
-            .collect(Collectors.toCollection(ArrayList::new));
-    }
-
-    @Redirect(
-        method = "loadProgress()V",
-        at = @At(
-            value = "INVOKE",
-            target = "Lbetterquesting/questing/QuestDatabase;readProgressFromNBT(Lnet/minecraft/nbt/NBTTagList;Z)V"))
-    private void hfstudio$bqapi$captureManagedProgressOnLoad(QuestDatabase instance, NBTTagList progressList,
-        boolean merge) {
-        BQManagedQuestProgress.capture(progressList, merge);
-        instance.readProgressFromNBT(progressList, merge);
+        return result.build()
+            .asList();
     }
 }

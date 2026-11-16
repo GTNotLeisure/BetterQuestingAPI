@@ -1,6 +1,6 @@
 package com.hfstudio.bqapi.api.builder;
 
-public final class Chapters {
+public class Chapters {
 
     private Chapters() {}
 

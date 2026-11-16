@@ -3,9 +3,11 @@ package com.hfstudio.bqapi.api.importer;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 
 import java.io.IOException;
+import java.net.JarURLConnection;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.nio.charset.StandardCharsets;
@@ -13,6 +15,10 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.UUID;
+import java.util.jar.JarEntry;
+import java.util.jar.JarFile;
+import java.util.jar.JarOutputStream;
+import java.util.stream.Stream;
 
 import net.minecraft.nbt.NBTTagCompound;
 import net.minecraft.nbt.NBTTagList;
@@ -124,6 +130,83 @@ public class ImportedQuestFolderTest {
                     .getUuid());
         } finally {
             pack.close();
+        }
+    }
+
+    @Test
+    public void importDoesNotCloseAClassloaderSharedJar() throws Exception {
+        Path jarPath = Files.createTempFile("bq-import-resource", ".jar");
+        try (SamplePack pack = createSamplePack()) {
+            Path sourceRoot = Path.of(pack.loader.getURLs()[0].toURI());
+            try (JarOutputStream output = new JarOutputStream(Files.newOutputStream(jarPath));
+                Stream<Path> paths = Files.walk(sourceRoot)) {
+                for (Path path : paths.filter(Files::isRegularFile)
+                    .toList()) {
+                    String name = sourceRoot.relativize(path)
+                        .toString()
+                        .replace('\\', '/');
+                    output.putNextEntry(new JarEntry(name));
+                    Files.copy(path, output);
+                    output.closeEntry();
+                }
+            }
+            try (URLClassLoader loader = new URLClassLoader(
+                new URL[] { jarPath.toUri()
+                    .toURL() },
+                getClass().getClassLoader())) {
+                ImportedQuestFolder folder = ImportedQuestFolders.folder("testmod", "questpacks/main")
+                    .classLoader(loader)
+                    .build();
+                String marker = folder.getClasspathRoot() + "/QuestLinesOrder.txt";
+                JarURLConnection connection = (JarURLConnection) loader.getResource(marker)
+                    .openConnection();
+                try (JarFile sharedJar = connection.getJarFile()) {
+                    assertEquals(
+                        2,
+                        BQApi.importFolder(folder)
+                            .size());
+                    assertNotNull(sharedJar.getJarEntry(marker));
+                    assertEquals(
+                        2,
+                        BQApi.importFolder(folder)
+                            .size());
+                }
+            }
+        } finally {
+            Files.deleteIfExists(jarPath);
+        }
+    }
+
+    @Test
+    public void resourceRootsCannotEscapeTheirModDirectory() {
+        assertThrows(
+            IllegalArgumentException.class,
+            () -> ImportedQuestFolders.folder("testmod", "../outside")
+                .build());
+        assertThrows(
+            IllegalArgumentException.class,
+            () -> ImportedQuestFolders.folder("../testmod", "quests")
+                .build());
+    }
+
+    @Test
+    public void placementsCanReferenceQuestsInAnotherDirectory() throws Exception {
+        try (SamplePack pack = createSamplePack()) {
+            Path sourceRoot = Path.of(pack.loader.getURLs()[0].toURI());
+            writeJson(
+                sourceRoot.resolve(pack.folder.getClasspathRoot())
+                    .resolve("QuestLines/alpha_line/QuestLine.json"),
+                createQuestLineNbt(pack.alphaLineId, "alpha", pack.betaQuestId, 12, 34, 24, 24));
+
+            List<ChapterDefinition> chapters = BQApi.importFolder(pack.folder);
+
+            assertEquals(
+                pack.betaQuestId,
+                chapters.get(0)
+                    .getPlacements()
+                    .get(0)
+                    .getQuest()
+                    .getUuid());
         }
     }
 
@@ -251,7 +334,7 @@ public class ImportedQuestFolderTest {
         Files.write(path, value.getBytes(StandardCharsets.UTF_8));
     }
 
-    private static final class SamplePack implements AutoCloseable {
+    private static class SamplePack implements AutoCloseable {
 
         private final URLClassLoader loader;
         private final ImportedQuestFolder folder;

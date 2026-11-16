@@ -4,12 +4,12 @@ import net.minecraft.nbt.NBTTagCompound;
 
 import betterquesting.api.questing.tasks.ITask;
 
-public final class TaskProgressMigrator {
+public class TaskProgressMigrator {
 
     private TaskProgressMigrator() {}
 
     public static void copyCompatibleProgress(ITask source, ITask target) {
-        if (source == null || target == null) {
+        if (source == null || target == null || source == target) {
             return;
         }
         if (!source.getFactoryID()

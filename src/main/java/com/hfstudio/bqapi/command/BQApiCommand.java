@@ -23,33 +23,10 @@ import com.hfstudio.bqapi.runtime.BQReinjector;
 
 import cpw.mods.fml.common.FMLCommonHandler;
 
-/**
- * <b>/bqapi</b> debug command.
- *
- * <p>
- * Available sub-commands:
- * </p>
- * 
- * <pre>
- *   /bqapi info                       — Show registration statistics overview
- *   /bqapi list [page]                — List all registered chapters
- *   /bqapi quest &lt;id&gt;                 — Show quest details (string-id or UUID)
- *   /bqapi quest &lt;id&gt; stack           — Show the registration call stack of the chapter containing the quest
- *   /bqapi quest &lt;id&gt; prereqs         — List prerequisite quests
- *   /bqapi quest &lt;id&gt; patches         — List registered runtime patch sources
- *   /bqapi chapter &lt;id&gt;              — Show chapter details (string-id or UUID)
- *   /bqapi chapter &lt;id&gt; stack         — Show the chapter registration call stack
- *   /bqapi chapter &lt;id&gt; quests [page] — List all quests in the chapter
- *   /bqapi source &lt;id&gt;               — Auto-detect chapter/quest and show registration source
- *   /bqapi search &lt;keyword&gt;          — Search for keyword in registered IDs
- *   /bqapi reload                     — Trigger reinject (requires OP)
- * </pre>
- */
-public final class BQApiCommand extends CommandBase {
+public class BQApiCommand extends CommandBase {
 
     private static final int PAGE_SIZE = 8;
 
-    // ── Color aliases ─────────────────────────────────────────────────────────
     private static final EnumChatFormatting H = EnumChatFormatting.GOLD; // heading
     private static final EnumChatFormatting K = EnumChatFormatting.AQUA; // key
     private static final EnumChatFormatting V = EnumChatFormatting.WHITE; // value
@@ -57,10 +34,6 @@ public final class BQApiCommand extends CommandBase {
     private static final EnumChatFormatting S = EnumChatFormatting.GREEN; // source
     private static final EnumChatFormatting W = EnumChatFormatting.YELLOW; // warning / secondary
     private static final EnumChatFormatting E = EnumChatFormatting.RED; // error
-
-    // ═══════════════════════════════════════════════════════════════════════════
-    // CommandBase overrides
-    // ═══════════════════════════════════════════════════════════════════════════
 
     @Override
     public String getCommandName() {
@@ -147,10 +120,6 @@ public final class BQApiCommand extends CommandBase {
         }
     }
 
-    // ═══════════════════════════════════════════════════════════════════════════
-    // /bqapi info
-    // ═══════════════════════════════════════════════════════════════════════════
-
     private void doInfo(ICommandSender sender) {
         int chapters = BQApi.getRegisteredChapterUuids()
             .size();
@@ -165,10 +134,6 @@ public final class BQApiCommand extends CommandBase {
         line(sender);
     }
 
-    // ═══════════════════════════════════════════════════════════════════════════
-    // /bqapi list [page]
-    // ═══════════════════════════════════════════════════════════════════════════
-
     private void doList(ICommandSender sender, String[] args) {
         Collection<ChapterDefinition> all = BQApi.getRegisteredChapters();
         List<ChapterDefinition> list = new ArrayList<>(all);
@@ -176,7 +141,7 @@ public final class BQApiCommand extends CommandBase {
             msg(sender, W, "当前没有已注册的章节。");
             return;
         }
-        int page = parsePageArg(args, 2, list.size());
+        int page = parsePageArg(args, 1, list.size());
         int from = (page - 1) * PAGE_SIZE;
         int to = Math.min(from + PAGE_SIZE, list.size());
         int totalPages = (list.size() + PAGE_SIZE - 1) / PAGE_SIZE;
@@ -221,10 +186,6 @@ public final class BQApiCommand extends CommandBase {
         line(sender);
     }
 
-    // ═══════════════════════════════════════════════════════════════════════════
-    // /bqapi quest <id> [stack|prereqs|patches]
-    // ═══════════════════════════════════════════════════════════════════════════
-
     private void doQuest(ICommandSender sender, String[] args) {
         if (args.length < 2) {
             msg(sender, E, "用法: /bqapi quest <任务ID或UUID> [stack|prereqs|patches]");
@@ -259,7 +220,6 @@ public final class BQApiCommand extends CommandBase {
         boolean hasPatches = !BQApi.getQuestPatchRegistrationInfos(quest.getUuid())
             .isEmpty();
 
-        // Find the owning chapter.
         String chapterId = resolveQuestChapterId(quest.getUuid());
 
         line(sender);
@@ -366,10 +326,6 @@ public final class BQApiCommand extends CommandBase {
         line(sender);
     }
 
-    // ═══════════════════════════════════════════════════════════════════════════
-    // /bqapi chapter <id> [stack|quests [page]]
-    // ═══════════════════════════════════════════════════════════════════════════
-
     private void doChapter(ICommandSender sender, String[] args) {
         if (args.length < 2) {
             msg(sender, E, "用法: /bqapi chapter <章节ID或UUID> [stack|quests]");
@@ -475,10 +431,6 @@ public final class BQApiCommand extends CommandBase {
         line(sender);
     }
 
-    // ═══════════════════════════════════════════════════════════════════════════
-    // /bqapi source <id>
-    // ═══════════════════════════════════════════════════════════════════════════
-
     private void doSource(ICommandSender sender, String[] args) {
         if (args.length < 2) {
             msg(sender, E, "用法: /bqapi source <任务或章节的ID/UUID>");
@@ -486,7 +438,6 @@ public final class BQApiCommand extends CommandBase {
         }
         String idArg = args[1];
 
-        // Try quest first, then chapter.
         Optional<QuestDefinition> questOpt = resolveQuest(idArg);
         if (questOpt.isPresent()) {
             QuestDefinition quest = questOpt.get();
@@ -522,10 +473,6 @@ public final class BQApiCommand extends CommandBase {
         }
         line(sender);
     }
-
-    // ═══════════════════════════════════════════════════════════════════════════
-    // /bqapi search <keyword>
-    // ═══════════════════════════════════════════════════════════════════════════
 
     private void doSearch(ICommandSender sender, String[] args) {
         if (args.length < 2) {
@@ -570,10 +517,6 @@ public final class BQApiCommand extends CommandBase {
         line(sender);
     }
 
-    // ═══════════════════════════════════════════════════════════════════════════
-    // /bqapi reload
-    // ═══════════════════════════════════════════════════════════════════════════
-
     private void doReload(ICommandSender sender) {
         MinecraftServer server = FMLCommonHandler.instance()
             .getMinecraftServerInstance();
@@ -584,10 +527,6 @@ public final class BQApiCommand extends CommandBase {
         BQReinjector.reinject(server);
         msg(sender, S, "BQApi reinject 已触发。");
     }
-
-    // ═══════════════════════════════════════════════════════════════════════════
-    // Helpers: stack printing
-    // ═══════════════════════════════════════════════════════════════════════════
 
     private void printStack(ICommandSender sender, String title, BQRegistrationInfo info) {
         line(sender);
@@ -619,23 +558,15 @@ public final class BQApiCommand extends CommandBase {
         line(sender);
     }
 
-    // ═══════════════════════════════════════════════════════════════════════════
-    // Helpers: ID resolution
-    // ═══════════════════════════════════════════════════════════════════════════
-
-    /** Looks up a quest by string-id or UUID string. */
     private static Optional<QuestDefinition> resolveQuest(String idArg) {
-        // Try UUID first.
         UUID uuid = tryParseUuid(idArg);
         if (uuid != null) {
             Optional<QuestDefinition> byUuid = BQApi.getQuest(uuid);
             if (byUuid.isPresent()) return byUuid;
         }
-        // Fall back to string-id.
         return BQApi.getQuest(idArg);
     }
 
-    /** Looks up a chapter by string-id or UUID string. */
     private static Optional<ChapterDefinition> resolveChapter(String idArg) {
         UUID uuid = tryParseUuid(idArg);
         if (uuid != null) {
@@ -645,9 +576,7 @@ public final class BQApiCommand extends CommandBase {
         return BQApi.getChapter(idArg);
     }
 
-    /** Returns the chapter ID that contains the given quest UUID, or a placeholder if not found. */
     private static String resolveQuestChapterId(UUID questUuid) {
-        // BQApi does not expose a direct quest→chapter lookup, so iterate all chapters.
         for (ChapterDefinition ch : BQApi.getRegisteredChapters()) {
             for (QuestDefinition q : ch.getAllQuests()) {
                 if (q.getUuid()
@@ -658,10 +587,6 @@ public final class BQApiCommand extends CommandBase {
         }
         return G + "(未知章节)";
     }
-
-    // ═══════════════════════════════════════════════════════════════════════════
-    // Helpers: formatting
-    // ═══════════════════════════════════════════════════════════════════════════
 
     private void msg(ICommandSender sender, EnumChatFormatting color, String text) {
         sender.addChatMessage(new ChatComponentText(color + text));
@@ -679,7 +604,6 @@ public final class BQApiCommand extends CommandBase {
         sender.addChatMessage(new ChatComponentText(G + "---"));
     }
 
-    /** Shortens a fully-qualified class name to its simple (last-segment) name. */
     private static String shortClass(String fullName) {
         int dot = fullName.lastIndexOf('.');
         return dot >= 0 ? fullName.substring(dot + 1) : fullName;
@@ -693,7 +617,6 @@ public final class BQApiCommand extends CommandBase {
         }
     }
 
-    /** Parses the page argument (1-indexed); clamps to the valid range if out of bounds. */
     private static int parsePageArg(String[] args, int argIndex, int totalItems) {
         int totalPages = Math.max(1, (totalItems + PAGE_SIZE - 1) / PAGE_SIZE);
         if (args.length > argIndex) {

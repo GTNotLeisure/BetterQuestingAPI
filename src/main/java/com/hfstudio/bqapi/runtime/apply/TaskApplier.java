@@ -2,6 +2,7 @@ package com.hfstudio.bqapi.runtime.apply;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Objects;
 
 import net.minecraft.nbt.NBTTagCompound;
 
@@ -21,30 +22,17 @@ import bq_standard.tasks.TaskLocation;
 import bq_standard.tasks.TaskOptionalRetrieval;
 import bq_standard.tasks.TaskRetrieval;
 
-public final class TaskApplier {
+public class TaskApplier {
 
     public Map<Integer, ITask> buildTasks(Iterable<TaskDefinition> definitions) {
         Map<Integer, ITask> tasks = new LinkedHashMap<>();
-        int nextAutoSlot = 0;
-
-        for (TaskDefinition definition : definitions) {
-            int slot = definition.getSlot();
-            if (slot < 0) {
-                while (tasks.containsKey(nextAutoSlot)) {
-                    nextAutoSlot++;
-                }
-                slot = nextAutoSlot++;
-            }
-            if (tasks.containsKey(slot)) {
-                throw new IllegalArgumentException("Duplicate task slot: " + slot);
-            }
-            tasks.put(slot, createTask(definition));
-        }
+        DefinitionSlots.assign(definitions, TaskDefinition::getSlot, "task")
+            .forEach((slot, definition) -> tasks.put(slot, Objects.requireNonNull(createTask(definition), "task")));
 
         return tasks;
     }
 
-    private ITask createTask(TaskDefinition definition) {
+    protected ITask createTask(TaskDefinition definition) {
         if (definition instanceof CheckboxTaskDefinition) {
             return new TaskCheckbox();
         }
@@ -86,7 +74,7 @@ public final class TaskApplier {
                 .getName());
     }
 
-    private void applyRetrievalSettings(TaskRetrieval task, RetrievalTaskDefinition retrieval) {
+    protected void applyRetrievalSettings(TaskRetrieval task, RetrievalTaskDefinition retrieval) {
         task.ignoreNBT = retrieval.isIgnoreNbt();
         task.partialMatch = retrieval.isPartialMatch();
         task.consume = retrieval.isConsume();
@@ -94,7 +82,7 @@ public final class TaskApplier {
         task.autoConsume = retrieval.isAutoConsume();
 
         for (NBTTagCompound itemNbt : retrieval.getItems()) {
-            BigItemStack stack = JsonHelper.JsonToItemStack((NBTTagCompound) itemNbt.copy());
+            BigItemStack stack = JsonHelper.JsonToItemStack(itemNbt);
             if (stack == null) {
                 throw new IllegalArgumentException("Unable to load retrieval item from NBT");
             }

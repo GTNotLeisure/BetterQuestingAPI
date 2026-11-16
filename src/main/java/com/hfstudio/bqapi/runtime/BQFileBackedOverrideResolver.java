@@ -1,7 +1,10 @@
 package com.hfstudio.bqapi.runtime;
 
+import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Collections;
@@ -17,9 +20,12 @@ import net.minecraftforge.common.util.Constants;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import com.google.gson.JsonParser;
+
 import betterquesting.api.storage.BQ_Settings;
-import betterquesting.api.utils.JsonHelper;
 import betterquesting.api.utils.NBTConverter;
+import betterquesting.questing.QuestDatabase;
+import betterquesting.questing.QuestLineDatabase;
 
 public class BQFileBackedOverrideResolver {
 
@@ -31,6 +37,15 @@ public class BQFileBackedOverrideResolver {
     private static final String QUEST_LINE_FILE = "QuestLine.json";
 
     public BQFileOverrideSnapshot resolve(BQDefinitionRegistry registry) {
+        if (registry.getImportedQuestUuids()
+            .isEmpty()
+            && registry.getImportedChapterUuids()
+                .isEmpty()) {
+            return BQFileOverrideSnapshot.empty();
+        }
+        if (BQ_Settings.defaultDir == null) {
+            return BQFileOverrideSnapshot.empty();
+        }
         File defaultRoot = new File(BQ_Settings.defaultDir, DEFAULT_QUESTS_DIR);
         File defaultLegacyFile = new File(BQ_Settings.defaultDir, DEFAULT_QUESTS_FILE);
         if (!defaultRoot.isDirectory() && !defaultLegacyFile.isFile()) {
@@ -43,10 +58,11 @@ public class BQFileBackedOverrideResolver {
             fileQuestUuids.addAll(resolveQuestOverrides(new File(defaultRoot, QUESTS_DIR).toPath(), registry));
             fileChapterUuids.addAll(
                 resolveChapterOverrides(new File(defaultRoot, QUEST_LINES_DIR).toPath(), registry, fileQuestUuids));
-        }
-        if (defaultLegacyFile.isFile()) {
+        } else if (defaultLegacyFile.isFile()) {
             readLegacyOverrides(defaultLegacyFile, registry, fileQuestUuids, fileChapterUuids);
         }
+        fileQuestUuids.removeIf(uuid -> !QuestDatabase.INSTANCE.containsKey(uuid));
+        fileChapterUuids.removeIf(uuid -> !QuestLineDatabase.INSTANCE.containsKey(uuid));
         return new BQFileOverrideSnapshot(fileQuestUuids, fileChapterUuids);
     }
 
@@ -63,7 +79,7 @@ public class BQFileBackedOverrideResolver {
                         .toString()
                         .endsWith(".json"))
                 .forEach(path -> readQuestUuid(path, importedQuestUuids, resolved));
-        } catch (IOException e) {
+        } catch (IOException | UncheckedIOException e) {
             LOGGER.warn("Failed to scan BetterQuesting quest files at {}", questRoot, e);
         }
         return resolved;
@@ -88,8 +104,7 @@ public class BQFileBackedOverrideResolver {
                 continue;
             }
             try {
-                NBTTagCompound tag = NBTConverter
-                    .JSONtoNBT_Object(JsonHelper.ReadFromFile(chapterFile.toFile()), new NBTTagCompound(), true);
+                NBTTagCompound tag = readNbt(chapterFile);
                 UUID chapterUuid = NBTConverter.UuidValueType.QUEST_LINE.readId(tag);
                 if (!importedChapterUuids.contains(chapterUuid)) {
                     continue;
@@ -113,8 +128,7 @@ public class BQFileBackedOverrideResolver {
         }
         for (File file : files) {
             try {
-                NBTTagCompound tag = NBTConverter
-                    .JSONtoNBT_Object(JsonHelper.ReadFromFile(file), new NBTTagCompound(), true);
+                NBTTagCompound tag = readNbt(file.toPath());
                 UUID questUuid = NBTConverter.UuidValueType.QUEST.readId(tag);
                 if (fileQuestUuids.contains(questUuid)) {
                     return true;
@@ -129,8 +143,7 @@ public class BQFileBackedOverrideResolver {
     private void readLegacyOverrides(File legacyFile, BQDefinitionRegistry registry, Set<UUID> fileQuestUuids,
         Set<UUID> fileChapterUuids) {
         try {
-            NBTTagCompound root = NBTConverter
-                .JSONtoNBT_Object(JsonHelper.ReadFromFile(legacyFile), new NBTTagCompound(), true);
+            NBTTagCompound root = readNbt(legacyFile.toPath());
             Set<UUID> importedQuestUuids = registry.getImportedQuestUuids();
             NBTTagList questDatabase = root.getTagList("questDatabase", Constants.NBT.TAG_COMPOUND);
             for (int i = 0; i < questDatabase.tagCount(); i++) {
@@ -163,14 +176,23 @@ public class BQFileBackedOverrideResolver {
 
     private void readQuestUuid(Path questFile, Set<UUID> importedQuestUuids, Set<UUID> resolved) {
         try {
-            NBTTagCompound tag = NBTConverter
-                .JSONtoNBT_Object(JsonHelper.ReadFromFile(questFile.toFile()), new NBTTagCompound(), true);
+            NBTTagCompound tag = readNbt(questFile);
             UUID questUuid = NBTConverter.UuidValueType.QUEST.readId(tag);
             if (importedQuestUuids.contains(questUuid)) {
                 resolved.add(questUuid);
             }
         } catch (Exception e) {
             LOGGER.warn("Failed to parse BetterQuesting quest file {}", questFile, e);
+        }
+    }
+
+    protected NBTTagCompound readNbt(Path path) throws IOException {
+        try (BufferedReader reader = Files.newBufferedReader(path, StandardCharsets.UTF_8)) {
+            return NBTConverter.JSONtoNBT_Object(
+                new JsonParser().parse(reader)
+                    .getAsJsonObject(),
+                new NBTTagCompound(),
+                true);
         }
     }
 }

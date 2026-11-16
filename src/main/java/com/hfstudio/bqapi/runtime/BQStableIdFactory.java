@@ -4,7 +4,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.Objects;
 import java.util.UUID;
 
-public final class BQStableIdFactory {
+public class BQStableIdFactory {
 
     private BQStableIdFactory() {}
 

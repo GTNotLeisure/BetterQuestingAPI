@@ -3,7 +3,7 @@ package com.hfstudio.bqapi.api.builder;
 import com.hfstudio.bqapi.api.builder.reward.ItemRewardBuilder;
 import com.hfstudio.bqapi.api.builder.reward.RawRewardBuilder;
 
-public final class RewardBuilders {
+public class RewardBuilders {
 
     private RewardBuilders() {}
 

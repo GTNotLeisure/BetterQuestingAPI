@@ -13,11 +13,12 @@ import net.minecraft.nbt.NBTTagCompound;
 import com.hfstudio.bqapi.api.definition.QuestDefinition;
 import com.hfstudio.bqapi.api.definition.RewardDefinition;
 import com.hfstudio.bqapi.api.definition.TaskDefinition;
+import com.hfstudio.bqapi.runtime.BQStableIdFactory;
 
 import betterquesting.api.questing.IQuest;
 import betterquesting.api.utils.BigItemStack;
 
-public final class QuestBuilder {
+public class QuestBuilder {
 
     private final String id;
     private UUID uuid;
@@ -29,20 +30,18 @@ public final class QuestBuilder {
     private NBTTagCompound templateNbt;
     private boolean main;
 
-    private QuestBuilder(String id) {
+    protected QuestBuilder(String id) {
         this.id = Objects.requireNonNull(id, "id");
     }
 
-    static QuestBuilder quest(String id) {
+    public static QuestBuilder quest(String id) {
         return new QuestBuilder(id);
     }
 
     /**
-     * Creates a copy builder from an existing {@link QuestDefinition}, preserving all
-     * fields including the UUID. Typically used inside a
-     * {@link com.hfstudio.bqapi.BQApi#patchQuest} lambda to produce a modified copy.
+     * Preserves every field, including the UUID. Added tasks and rewards append to the existing lists.
      */
-    static QuestBuilder from(QuestDefinition definition) {
+    public static QuestBuilder from(QuestDefinition definition) {
         QuestBuilder b = new QuestBuilder(definition.getId());
         b.uuid = definition.getUuid();
         b.tasks.addAll(definition.getTasks());
@@ -124,7 +123,7 @@ public final class QuestBuilder {
     public QuestDefinition build() {
         return new QuestDefinition(
             id,
-            uuid == null ? com.hfstudio.bqapi.runtime.BQStableIdFactory.quest(id) : uuid,
+            uuid == null ? BQStableIdFactory.quest(id) : uuid,
             tasks,
             prerequisites,
             requirementTypes,

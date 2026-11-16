@@ -6,62 +6,48 @@ import java.lang.reflect.Modifier;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Objects;
 import java.util.ServiceLoader;
 import java.util.Set;
 
 import com.hfstudio.bqapi.api.QuestReloadService;
 import com.hfstudio.bqapi.api.QuestReloader;
 
-/**
- * Stores classes registered as {@link QuestReloader} participants and invokes
- * their {@code reloadQuest()} method on every reinject cycle.
- */
-public final class BQReloaderRegistry {
+public class BQReloaderRegistry {
 
     private static final String RELOAD_METHOD = "reloadQuest";
 
-    /** Resolved methods, one per registered class. */
     private final List<Method> reloaders = new ArrayList<>();
 
-    /** SPI instances discovered or registered manually. */
     private final List<QuestReloadService> reloadServices = new ArrayList<>();
 
-    /** Class-name dedupe set for SPI implementations. */
-    private final Set<String> reloadServiceClassNames = new HashSet<>();
+    private final Set<Class<?>> reloadServiceClasses = new HashSet<>();
 
     /**
-     * Registers a class as a reload participant.
+     * Requires a public {@link QuestReloader} class declaring {@code public static void reloadQuest()}.
+     * Repeated registration of the same class is ignored.
      *
-     * <p>
-     * Validation rules (violations throw {@link IllegalArgumentException}):
-     * <ul>
-     * <li>The class must be annotated with {@link QuestReloader}.</li>
-     * <li>The class must declare a {@code public static void reloadQuest()} method.</li>
-     * </ul>
-     *
-     * <p>
-     * Registering the same class more than once is a no-op.
-     *
-     * @param clazz the class to register; must satisfy the rules above
      * @throws IllegalArgumentException if the class fails validation
      */
     public synchronized void register(Class<?> clazz) {
+        Objects.requireNonNull(clazz, "clazz");
         if (!clazz.isAnnotationPresent(QuestReloader.class)) {
             throw new IllegalArgumentException(clazz.getName() + " must be annotated with @QuestReloader");
         }
 
         Method method;
         try {
-            method = clazz.getMethod(RELOAD_METHOD);
+            method = clazz.getDeclaredMethod(RELOAD_METHOD);
         } catch (NoSuchMethodException e) {
             throw new IllegalArgumentException(clazz.getName() + " must declare: public static void reloadQuest()", e);
         }
 
-        if (!Modifier.isStatic(method.getModifiers()) || method.getReturnType() != void.class) {
+        if (!Modifier.isPublic(clazz.getModifiers()) || !Modifier.isPublic(method.getModifiers())
+            || !Modifier.isStatic(method.getModifiers())
+            || method.getReturnType() != void.class) {
             throw new IllegalArgumentException(clazz.getName() + ".reloadQuest() must be public static void");
         }
 
-        // Avoid duplicate registration
         for (Method existing : reloaders) {
             if (existing.getDeclaringClass() == clazz) {
                 return;
@@ -72,22 +58,17 @@ public final class BQReloaderRegistry {
     }
 
     /**
-     * Registers a SPI service instance. Duplicate implementation classes are ignored.
+     * Only the first instance of each implementation class is registered.
      */
     public synchronized void registerService(QuestReloadService service) {
-        QuestReloadService value = java.util.Objects.requireNonNull(service, "service");
-        String className = value.getClass()
-            .getName();
-        if (!reloadServiceClassNames.add(className)) {
+        QuestReloadService value = Objects.requireNonNull(service, "service");
+        if (!reloadServiceClasses.add(value.getClass())) {
             return;
         }
         reloadServices.add(value);
     }
 
-    /**
-     * Discovers and registers SPI implementations via {@link ServiceLoader}.
-     */
-    public synchronized void registerFromServiceLoader(ClassLoader classLoader) {
+    public void registerFromServiceLoader(ClassLoader classLoader) {
         ServiceLoader<QuestReloadService> loader = ServiceLoader.load(QuestReloadService.class, classLoader);
         for (QuestReloadService service : loader) {
             registerService(service);
@@ -95,12 +76,20 @@ public final class BQReloaderRegistry {
     }
 
     /**
-     * Invokes {@code reloadQuest()} on every registered class in registration order.
+     * Invokes a snapshot outside the registry lock, running SPI services before annotated static callbacks.
+     * Registration order is preserved within each group.
+     * Registrations made by callbacks take effect on the next invocation.
      *
      * @throws RuntimeException wrapping any exception thrown by a reloader
      */
-    public synchronized void invokeAll() {
-        for (QuestReloadService service : reloadServices) {
+    public void invokeAll() {
+        List<QuestReloadService> services;
+        List<Method> methods;
+        synchronized (this) {
+            services = new ArrayList<>(reloadServices);
+            methods = new ArrayList<>(reloaders);
+        }
+        for (QuestReloadService service : services) {
             try {
                 service.reloadQuest();
             } catch (RuntimeException e) {
@@ -111,7 +100,7 @@ public final class BQReloaderRegistry {
             }
         }
 
-        for (Method method : reloaders) {
+        for (Method method : methods) {
             try {
                 method.invoke(null);
             } catch (InvocationTargetException e) {

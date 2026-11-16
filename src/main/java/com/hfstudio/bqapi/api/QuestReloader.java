@@ -5,59 +5,19 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
+import com.hfstudio.bqapi.BQApi;
+
 /**
- * Marks a class as a BetterQuestingAPI reload participant.
+ * Compatibility alternative to {@link QuestReloadService} for static reload callbacks.
  *
  * <p>
- * This is a compatibility mechanism. The recommended integration path is
- * Java SPI via {@link QuestReloadService}.
+ * Register the public annotated class once with {@link BQApi#registerReloader(Class)}.
+ * It must declare {@code public static void reloadQuest()}. The callback runs before definitions
+ * are applied, including after {@code /bq_admin default load}, so its registrations take effect
+ * in the same cycle.
  *
  * <p>
- * Classes annotated with {@code @QuestReloader} must declare a
- * {@code public static void reloadQuest()} method. BetterQuestingAPI will
- * invoke that method on every reinject cycle (including after
- * {@code /bq_admin default load} reloads BetterQuesting's database).
- *
- * <p>
- * The class must be explicitly registered once (typically during
- * {@code FMLInitializationEvent} or {@code FMLPostInitializationEvent}):
- * 
- * <pre>
- * {@code
- * BQApi.registerReloader(MyQuestSetup.class);
- * }
- * </pre>
- *
- * <p>
- * The {@code reloadQuest()} method is called <em>before</em>
- * {@link com.hfstudio.bqapi.runtime.BQRuntimeApplier} writes definitions into
- * BetterQuesting, so any chapters or quests registered inside it will be
- * applied in the same reinject cycle.
- *
- * <p>
- * <strong>Important</strong>: do <em>not</em> call
- * {@link com.hfstudio.bqapi.BQApi#patchQuest} inside {@code reloadQuest()}.
- * Patches are persistent and accumulate across calls; registering the same
- * patch repeatedly will apply it multiple times per reinject. Register patches
- * once at startup instead.
- *
- * <p>
- * Example:
- * 
- * <pre>
- * {@code
- * {@literal @}QuestReloader
- * public class DynamicQuestSetup {
- *
- *     public static void reloadQuest() {
- *         // Re-register chapters that depend on runtime state
- *         if (Loader.isModLoaded("somemod")) {
- *             BQApi.register(buildCompatChapter());
- *         }
- *     }
- * }
- * }
- * </pre>
+ * Callbacks must be idempotent. Register persistent quest patches at startup, outside the callback.
  */
 @Retention(RetentionPolicy.RUNTIME)
 @Target(ElementType.TYPE)

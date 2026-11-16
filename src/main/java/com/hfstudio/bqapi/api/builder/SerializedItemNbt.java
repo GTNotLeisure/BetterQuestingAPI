@@ -2,7 +2,7 @@ package com.hfstudio.bqapi.api.builder;
 
 import net.minecraft.nbt.NBTTagCompound;
 
-public final class SerializedItemNbt {
+public class SerializedItemNbt {
 
     private SerializedItemNbt() {}
 

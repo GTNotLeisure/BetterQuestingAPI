@@ -4,7 +4,7 @@ import java.util.UUID;
 
 import betterquesting.api.utils.UuidConverter;
 
-public final class BQApiLangKeys {
+public class BQApiLangKeys {
 
     private BQApiLangKeys() {}
 

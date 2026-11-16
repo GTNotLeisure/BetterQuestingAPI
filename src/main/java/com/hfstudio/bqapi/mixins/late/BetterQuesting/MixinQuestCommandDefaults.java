@@ -1,7 +1,7 @@
 package com.hfstudio.bqapi.mixins.late.BetterQuesting;
 
-import java.io.File;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -9,42 +9,31 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
-import net.minecraft.command.ICommandSender;
+import net.minecraft.entity.player.EntityPlayerMP;
 import net.minecraft.nbt.NBTTagList;
+import net.minecraft.server.MinecraftServer;
 
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
-import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.Redirect;
-import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
+import com.google.common.collect.ImmutableSet;
 import com.hfstudio.bqapi.BQApi;
 import com.hfstudio.bqapi.runtime.BQManagedQuestProgress;
-import com.hfstudio.bqapi.runtime.BQReinjector;
+import com.hfstudio.bqapi.runtime.BQRuntime;
 
 import betterquesting.api.questing.IQuest;
 import betterquesting.api.questing.IQuestLine;
 import betterquesting.commands.admin.QuestCommandDefaults;
+import betterquesting.network.handlers.NetChapterSync;
+import betterquesting.network.handlers.NetSettingSync;
 import betterquesting.questing.QuestDatabase;
 import betterquesting.questing.QuestLineDatabase;
 import cpw.mods.fml.common.FMLCommonHandler;
 
 @Mixin(value = QuestCommandDefaults.class, remap = false)
 public abstract class MixinQuestCommandDefaults {
-
-    @Inject(method = "load(Lnet/minecraft/command/ICommandSender;Ljava/lang/String;Ljava/io/File;Z)V", at = @At("HEAD"))
-    private static void hfstudio$bqapi$resetManagedProgressCaptureBeforeLoad(ICommandSender sender, String databaseName,
-        File dataDir, boolean loadWorldSettings, CallbackInfo ci) {
-        BQManagedQuestProgress.reset();
-    }
-
-    @Inject(
-        method = "loadLegacy(Lnet/minecraft/command/ICommandSender;Ljava/lang/String;Ljava/io/File;Z)V",
-        at = @At("HEAD"))
-    private static void hfstudio$bqapi$resetManagedProgressCaptureBeforeLoadLegacy(ICommandSender sender,
-        String databaseName, File legacyFile, boolean loadWorldSettings, CallbackInfo ci) {
-        BQManagedQuestProgress.reset();
-    }
 
     @Redirect(
         method = "save(Lnet/minecraft/command/ICommandSender;Ljava/lang/String;Ljava/io/File;)V",
@@ -98,7 +87,7 @@ public abstract class MixinQuestCommandDefaults {
     }
 
     @Redirect(
-        method = "load(Lnet/minecraft/command/ICommandSender;Ljava/lang/String;Ljava/io/File;Z)V",
+        method = { "load", "loadLegacy" },
         at = @At(
             value = "INVOKE",
             target = "Lbetterquesting/questing/QuestDatabase;readProgressFromNBT(Lnet/minecraft/nbt/NBTTagList;Z)V"))
@@ -109,45 +98,66 @@ public abstract class MixinQuestCommandDefaults {
     }
 
     @Redirect(
-        method = "loadLegacy(Lnet/minecraft/command/ICommandSender;Ljava/lang/String;Ljava/io/File;Z)V",
+        method = { "load", "loadLegacy" },
         at = @At(
             value = "INVOKE",
-            target = "Lbetterquesting/questing/QuestDatabase;readProgressFromNBT(Lnet/minecraft/nbt/NBTTagList;Z)V"))
-    private static void hfstudio$bqapi$captureManagedProgressOnLoadLegacy(QuestDatabase instance,
-        NBTTagList progressList, boolean merge) {
-        BQManagedQuestProgress.capture(progressList, merge);
-        instance.readProgressFromNBT(progressList, merge);
+            target = "Lbetterquesting/network/handlers/NetSettingSync;sendSync(Lnet/minecraft/entity/player/EntityPlayerMP;)V"))
+    private static void hfstudio$bqapi$syncSettingsToCurrentPlayers(EntityPlayerMP player) {
+        MinecraftServer server = hfstudio$bqapi$server();
+        BQRuntime runtime = BQApi.getRuntime();
+        runtime.afterDatabaseLoad(server);
+        if (player != null) {
+            NetSettingSync.sendSync(player);
+        } else {
+            runtime.getSynchronizer()
+                .syncSettings(server);
+        }
     }
 
-    @Inject(method = "load(Lnet/minecraft/command/ICommandSender;Ljava/lang/String;Ljava/io/File;Z)V", at = @At("TAIL"))
-    private static void hfstudio$bqapi$afterLoad(ICommandSender sender, String databaseName, File dataDir,
-        boolean loadWorldSettings, CallbackInfo ci) {
-        BQReinjector.reinject(
-            FMLCommonHandler.instance()
-                .getMinecraftServerInstance());
+    @Redirect(
+        method = { "load", "loadLegacy" },
+        at = @At(
+            value = "INVOKE",
+            target = "Lbetterquesting/network/handlers/NetQuestSync;quickSync(Ljava/util/UUID;ZZ)V"))
+    private static void hfstudio$bqapi$syncQuestsToCurrentPlayers(UUID questUuid, boolean config, boolean progress) {
+        BQApi.getRuntime()
+            .getSynchronizer()
+            .syncQuests(hfstudio$bqapi$server(), questUuid, config, progress);
     }
 
-    @Inject(
-        method = "loadLegacy(Lnet/minecraft/command/ICommandSender;Ljava/lang/String;Ljava/io/File;Z)V",
-        at = @At("TAIL"))
-    private static void hfstudio$bqapi$afterLoadLegacy(ICommandSender sender, String databaseName, File legacyFile,
-        boolean loadWorldSettings, CallbackInfo ci) {
-        BQReinjector.reinject(
-            FMLCommonHandler.instance()
-                .getMinecraftServerInstance());
+    @Redirect(
+        method = { "load", "loadLegacy" },
+        at = @At(
+            value = "INVOKE",
+            target = "Lbetterquesting/network/handlers/NetChapterSync;sendSync(Lnet/minecraft/entity/player/EntityPlayerMP;Ljava/util/Collection;)V"))
+    private static void hfstudio$bqapi$syncChaptersToCurrentPlayers(EntityPlayerMP player, Collection<UUID> chapters) {
+        if (player != null) {
+            NetChapterSync.sendSync(player, chapters);
+        } else {
+            BQApi.getRuntime()
+                .getSynchronizer()
+                .syncChapters(hfstudio$bqapi$server(), chapters);
+        }
     }
 
+    @Unique
+    private static MinecraftServer hfstudio$bqapi$server() {
+        return FMLCommonHandler.instance()
+            .getMinecraftServerInstance();
+    }
+
+    @Unique
     private static List<UUID> filteredSubset(List<UUID> subset, Set<UUID> managedUuids, Set<UUID> allAvailable) {
         if (managedUuids.isEmpty()) {
             return subset;
         }
-        if (subset == null) {
-            return allAvailable.stream()
-                .filter(id -> !managedUuids.contains(id))
-                .collect(Collectors.toCollection(ArrayList::new));
+        ImmutableSet.Builder<UUID> result = ImmutableSet.builder();
+        for (UUID uuid : subset == null ? allAvailable : subset) {
+            if (!managedUuids.contains(uuid)) {
+                result.add(uuid);
+            }
         }
-        return subset.stream()
-            .filter(id -> !managedUuids.contains(id))
-            .collect(Collectors.toCollection(ArrayList::new));
+        return result.build()
+            .asList();
     }
 }

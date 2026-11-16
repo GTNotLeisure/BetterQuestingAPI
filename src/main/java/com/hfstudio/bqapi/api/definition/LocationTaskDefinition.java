@@ -2,7 +2,7 @@ package com.hfstudio.bqapi.api.definition;
 
 import java.util.Objects;
 
-public final class LocationTaskDefinition extends TaskDefinition {
+public class LocationTaskDefinition extends TaskDefinition {
 
     private final String labelKey;
     private final int x;

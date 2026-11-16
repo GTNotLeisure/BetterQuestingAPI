@@ -5,7 +5,7 @@ import java.util.Objects;
 import net.minecraft.nbt.NBTTagCompound;
 import net.minecraft.util.ResourceLocation;
 
-public final class RawTaskDefinition extends TaskDefinition {
+public class RawTaskDefinition extends TaskDefinition {
 
     private final ResourceLocation factoryId;
     private final NBTTagCompound configNbt;

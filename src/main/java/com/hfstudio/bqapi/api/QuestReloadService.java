@@ -1,22 +1,22 @@
 package com.hfstudio.bqapi.api;
 
+import java.util.ServiceLoader;
+
+import com.hfstudio.bqapi.BQApi;
+
 /**
- * SPI contract for dynamic quest reloading.
+ * Reload callback discovered through Java {@link ServiceLoader}.
  *
  * <p>
- * Implementations are discovered through Java {@link java.util.ServiceLoader}
- * using a service descriptor file:
- * {@code META-INF/services/com.hfstudio.bqapi.api.QuestReloadService}
- * with one implementation class name per line.
+ * List implementation class names, one per line, in
+ * {@code META-INF/services/com.hfstudio.bqapi.api.QuestReloadService}.
+ * Only the first instance of each implementation class is registered.
  *
  * <p>
- * Every discovered implementation is invoked at the beginning of each
- * {@link com.hfstudio.bqapi.BQApi#reinject} cycle.
+ * Callbacks run before definitions are applied and must be idempotent.
+ * Register persistent patches through {@link BQApi#patchQuest} at startup, outside the callback.
  */
 public interface QuestReloadService {
 
-    /**
-     * Called before definitions are applied to BetterQuesting in a reinject cycle.
-     */
     void reloadQuest();
 }

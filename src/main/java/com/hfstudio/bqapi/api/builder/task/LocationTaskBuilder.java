@@ -5,7 +5,7 @@ import java.util.Objects;
 import com.hfstudio.bqapi.api.builder.TaskBuilder;
 import com.hfstudio.bqapi.api.definition.LocationTaskDefinition;
 
-public final class LocationTaskBuilder extends TaskBuilder<LocationTaskDefinition, LocationTaskBuilder> {
+public class LocationTaskBuilder extends TaskBuilder<LocationTaskDefinition, LocationTaskBuilder> {
 
     private String labelKey = "";
     private int x;

@@ -7,12 +7,13 @@ import java.util.Objects;
 import net.minecraft.item.ItemStack;
 import net.minecraft.nbt.NBTTagCompound;
 
+import com.hfstudio.bqapi.api.builder.SerializedItemNbt;
 import com.hfstudio.bqapi.api.builder.TaskBuilder;
 import com.hfstudio.bqapi.api.definition.OptionalRetrievalTaskDefinition;
 
 import betterquesting.api.utils.BigItemStack;
 
-public final class OptionalRetrievalTaskBuilder
+public class OptionalRetrievalTaskBuilder
     extends TaskBuilder<OptionalRetrievalTaskDefinition, OptionalRetrievalTaskBuilder> {
 
     private final List<NBTTagCompound> items = new ArrayList<>();
@@ -34,7 +35,7 @@ public final class OptionalRetrievalTaskBuilder
     }
 
     public OptionalRetrievalTaskBuilder item(String itemId, int count, int damage) {
-        this.items.add(com.hfstudio.bqapi.api.builder.SerializedItemNbt.of(itemId, count, damage));
+        this.items.add(SerializedItemNbt.of(itemId, count, damage));
         return this;
     }
 

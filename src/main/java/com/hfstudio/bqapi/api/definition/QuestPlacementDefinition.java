@@ -2,7 +2,7 @@ package com.hfstudio.bqapi.api.definition;
 
 import java.util.Objects;
 
-public final class QuestPlacementDefinition {
+public class QuestPlacementDefinition {
 
     private final QuestDefinition quest;
     private final int x;

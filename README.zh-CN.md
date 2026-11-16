@@ -75,7 +75,7 @@ import com.hfstudio.bqapi.api.definition.ChapterDefinition;
 import com.hfstudio.bqapi.api.definition.QuestDefinition;
 import com.hfstudio.bqapi.api.definition.QuestPlacementDefinition;
 
-public final class ExampleQuestRegistration {
+public class ExampleQuestRegistration {
 
     public static void registerAll() {
         QuestDefinition starterQuest = Quests.quest("starter_collect_logs")
@@ -113,7 +113,7 @@ import java.util.UUID;
 import com.hfstudio.bqapi.BQApi;
 import com.hfstudio.bqapi.api.builder.Chapters;
 
-// 通过 UUID 指定前置章节
+// 排在指定 UUID 的现有章节之后
 ChapterDefinition myChapter = Chapters.chapter("my_new_chapter")
     .orderAfter(UUID.fromString("...existing chapter uuid..."))
     .build();
@@ -121,11 +121,11 @@ ChapterDefinition myChapter = Chapters.chapter("my_new_chapter")
 BQApi.register(myChapter);
 ```
 
-也可以用章节 ID（字符串形式）指定，API 会自动转换为 UUID：
+也可以用章节 ID（字符串形式）指定，The API converts the ID to a UUID：
 
 ```java
 ChapterDefinition myChapter = Chapters.chapter("my_new_chapter")
-    .orderAfter("existing_chapter_id")  // API 会自动转换为 UUID
+    .orderAfter("existing_chapter_id")  // API 会将 ID 转换为 UUID
     .build();
 ```
 
@@ -138,7 +138,7 @@ ChapterDefinition myChapter = Chapters.chapter("my_new_chapter")
 ```java
 import com.hfstudio.bqapi.BQApi;
 
-public final class ExampleImportRegistration {
+public class ExampleImportRegistration {
 
     public static void registerImported() {
         BQApi.registerImportedFolder("yourmodid", "bqapi/quests");
@@ -157,7 +157,17 @@ public final class ExampleImportRegistration {
 
 ### 3. 运行时重注入
 
-默认情况下，服务器启动后的重注入由 [src/main/java/com/hfstudio/bqapi/BQApiMod.java](src/main/java/com/hfstudio/bqapi/BQApiMod.java) 自动处理。
+世界加载由 `MixinSaveLoadHandler` 接入：在 BetterQuesting 读取旧版或逐玩家进度文件之前应用任务定义。`BQApiMod` 负责注册调试命令，不再在服务器启动完成后重复注入。
+
+`BQApi.reinject(server)` 必须在当前服务器线程调用。流程依次执行重载回调、生成注册快照、预先构建任务内容、恢复延迟的受管任务进度，再只同步本次受管任务和章节的 UUID。任务配置与玩家进度在同一次同步中发送；后来加入的玩家使用 BetterQuesting 原有的登录同步。单人或局域网房主共享服务器任务库，不再接收重复的数据库包。
+
+显式执行 `/bq_admin default load` 仍然会替换完整任务库。BQAPI 在该命令原有同步之前补齐定义，不会追加第二轮广播。普通重注入不广播设置，也不清空无关任务。
+
+需要在调整顺序后保留进度的任务和奖励，应显式设置 `.slot(n)`。自动槽位在全部显式槽位预留后分配。
+
+注册查询返回不可变快照。重载回调和补丁在注册表锁外执行，遍历期间新增的回调在后续轮次执行；补丁必须保留任务原有的 ID 与 UUID。第三方任务和奖励工厂可通过 Raw 定义接入，也可以使用构造器注入自定义应用器。
+
+BetterQuesting 原有的数据更新通知仍然存在。第三方监听器需要区分界面/数据更新与世界加载，不能每收到更新就清空或重建任务。外部回调主动删除的进度不属于 BQAPI 可以自动恢复的范围。
 
 如果你的模组在运行过程中动态变更了定义，可手动触发：
 
@@ -182,14 +192,14 @@ import com.hfstudio.bqapi.BQApi;
 import com.hfstudio.bqapi.api.definition.ChapterDefinition;
 import com.hfstudio.bqapi.api.definition.QuestDefinition;
 
-// 判断是否存在
+// 检查任务是否已注册
 boolean exists = BQApi.hasQuest("mymod.chapter1.intro");
 
-// 按字符串 ID 获取
+// 查询已注册的字符串 ID
 Optional<QuestDefinition> quest = BQApi.getQuest("mymod.chapter1.intro");
 quest.ifPresent(q -> System.out.println("UUID: " + q.getUuid()));
 
-// 按 UUID 获取章节
+// 查询章节
 Optional<ChapterDefinition> chapter = BQApi.getChapter("mymod.chapter1");
 ```
 
@@ -202,11 +212,11 @@ import com.hfstudio.bqapi.BQApi;
 import com.hfstudio.bqapi.api.builder.Quests;
 import com.hfstudio.bqapi.api.builder.TaskBuilders;
 
-// 在其他模组的任务上追加一个物品收集任务
+// 向已注册任务追加物品提交目标
 BQApi.patchQuest("othermod.some_quest", def ->
     Quests.copyOf(def)
-        .task(TaskBuilders.retrieval()
-            .item("minecraft:diamond", 1)
+        .task(TaskBuilders.retrieval("extra_diamond")
+            .item("minecraft:diamond", 1, 0)
             .build())
         .build());
 ```
@@ -225,7 +235,7 @@ import com.hfstudio.bqapi.BQApi;
 import com.hfstudio.bqapi.api.QuestReloadService;
 import cpw.mods.fml.common.Loader;
 
-public final class MyQuestReloadService implements QuestReloadService {
+public class MyQuestReloadService implements QuestReloadService {
 
     @Override
     public void reloadQuest() {
@@ -271,7 +281,7 @@ BQApi.registerReloader(MyQuestSetup.class);
 
 ```gradle
 dependencies {
-    // 将 <group>:<artifact>:<version> 替换为实际发布坐标
+    // 替换为已发布的依赖坐标
     implementation("<group>:<artifact>:<version>:api")
 }
 ```
@@ -401,12 +411,12 @@ usesShadowedDependencies = true
 #### 步骤 4：在 `dependencies.gradle` 添加依赖
 
 ```groovy
-// 将 API 类嵌入到本模组 jar（shadow 合并）
+// 使用 Shadow 嵌入 API 类
 shadowCompile("com.github.<用户名>:BetterQuestingAPI:<version>:api") {
-    // 防止传递依赖意外携带非必要内容
+    // 嵌入产物不包含传递依赖
     transitive = false
 }
-// 用于开发时运行（可选：本地测试需要 BetterQuesting 主模组）
+// 可选：为开发运行环境添加 BetterQuesting 依赖
 devOnlyNonPublishable("com.github.GTNewHorizons:BetterQuesting:3.x.x-GTNH:dev")
 ```
 
@@ -415,16 +425,16 @@ devOnlyNonPublishable("com.github.GTNewHorizons:BetterQuesting:3.x.x-GTNH:dev")
 由于 Shadow 方案不打包 BetterQuestingAPI 主模组的 mixin，下游模组**必须保留自己的 mixin 注入代码**，例如：
 
 ```java
-// 保留 com.science.gtnl.mixins.late.BetterQuesting.MixinQuestCommandDefaults
-// 它注入了 QuestCommandDefaults.load() 和 loadLegacy() 两个位置
-// BQReinjector 已由 Shadow 合并进本模组，无需额外 import
+// 安装当前版本的 MixinSaveLoadHandler 和 MixinQuestCommandDefaults 集成。
+// 在读取世界进度前创建任务定义对应的运行时对象。
+// 显式重载时，在原有同步操作之前应用任务定义。
 ```
 
 `Mixins.java` 中对应枚举项**保持不变**：
 
 ```java
 BETTER_QUESTING_RUNTIME(new MixinBuilder("BetterQuesting Runtime API Mixins")
-    .addCommonMixins("BetterQuesting.MixinQuestCommandDefaults")
+    .addCommonMixins("BetterQuesting.MixinSaveLoadHandler", "BetterQuesting.MixinQuestCommandDefaults")
     .setPhase(Phase.LATE)
     .addRequiredMod(ModList.BetterQuesting)),
 ```
@@ -442,11 +452,11 @@ BETTER_QUESTING_RUNTIME(new MixinBuilder("BetterQuesting Runtime API Mixins")
 #### 步骤 2：在 `dependencies.gradle` 添加编译依赖
 
 ```groovy
-// 仅用于编译（运行时由整合包提供主模组 jar）
+// 使用 API 编译，运行时由整合包提供主模组
 compileOnly("com.github.<用户名>:BetterQuestingAPI:<version>:api") {
     transitive = false
 }
-// 开发环境运行时（包含主模组 jar，提供 mixin 和初始化逻辑）
+// 开发运行环境使用主模组提供生命周期集成
 devOnlyNonPublishable("com.github.<用户名>:BetterQuestingAPI:<version>")
 devOnlyNonPublishable("com.github.GTNewHorizons:BetterQuesting:3.x.x-GTNH:dev")
 ```
@@ -463,9 +473,9 @@ src/main/java/<下游包>/mixins/late/BetterQuesting/MixinQuestCommandDefaults.j
 同时从 `Mixins.java` 中删除对应枚举项：
 
 ```java
-// 删除以下整段
+// 删除这段重复集成
 BETTER_QUESTING_RUNTIME(new MixinBuilder("BetterQuesting Runtime API Mixins")
-    .addCommonMixins("BetterQuesting.MixinQuestCommandDefaults")
+    .addCommonMixins("BetterQuesting.MixinSaveLoadHandler", "BetterQuesting.MixinQuestCommandDefaults")
     .setPhase(Phase.LATE)
     .addRequiredMod(ModList.BetterQuesting)),
 ```
@@ -477,7 +487,7 @@ BETTER_QUESTING_RUNTIME(new MixinBuilder("BetterQuesting Runtime API Mixins")
 ```java
 @Mod(
     modid = "yourmodid",
-    // ...
+    // 其他实现代码
     dependencies = "required-after:bqapi"
 )
 ```
@@ -488,16 +498,16 @@ BETTER_QUESTING_RUNTIME(new MixinBuilder("BetterQuesting Runtime API Mixins")
 
 ### 关于 API 初始化的注意事项
 
-BetterQuestingAPI 的初始化（包括 `@Mod.EventHandler onServerStarted` 中触发的 reinject 流程）**只在主模组 jar 的 `BQApiMod` 被加载时才会执行**。
+主模组负责生命周期接入，并要求安装 BetterQuesting。仅嵌入 API 的使用方需要保证以下接入恰好存在一份：
 
-| 方案 | API 类是否可用 | Mixin 是否生效 | `BQApiMod` 是否存在 |
-|------|--------------|--------------|------------------|
-| Shadow 嵌入 | ✅ | ✅（下游自有 mixin） | ❌（需下游自行触发 reinject） |
-| 外部模组依赖 | ✅ | ✅（BetterQuestingAPI 主模组管理） | ✅ |
+| 时机 | 调用 |
+|------|------|
+| 世界任务库开始加载前 | `BQApi.getRuntime().beginWorldLoad(server)` |
+| 即将读取世界进度时 | `BQApi.getRuntime().beforeWorldProgress(server)` |
+| 显式重载完成、原有同步开始前 | `BQApi.getRuntime().afterDatabaseLoad(server)` |
+| 世界任务库卸载后 | `BQApi.getRuntime().unload()` |
 
-> 使用 Shadow 方案时，reinject 的触发依赖下游模组的 mixin（注入 `QuestCommandDefaults.load` / `loadLegacy`），BetterQuestingAPI 的主模组事件订阅不会执行。外部模组依赖方案则完全委托给 BetterQuestingAPI 主模组管理，无需关心。
-
----
+这些调用在服务器线程执行。`BQReinjector.reinject(server)` 保留为 `BQApi.reinject(server)` 的兼容入口。使用主模组时，下游只需注册定义和回调。
 
 ### 多模组共存兼容性
 
@@ -514,24 +524,15 @@ Minecraft 1.7.10 所有模组共用同一个 `LaunchClassLoader`。当多个 jar
 
 > **版本不一致风险**：若模组 A Shadow 的是 1.0.0、模组 B Shadow 的是 1.1.0，先加载的副本获胜，另一个模组静默使用旧版 API。请确保所有 Shadow 副本版本一致。
 
-#### Mixin 双重注入
+#### 重复的生命周期接入
 
-若主模组 jar 已存在，同时某个 Shadow 模组仍注册了自己的 `MixinQuestCommandDefaults`，则 `QuestCommandDefaults.load()` / `loadLegacy()` 会被**两个 mixin 各注入一次**，导致 `BQReinjector.reinject()` 在极短时间内被调用两次。
+每个加载阶段只能由一份接入负责。相同位置的重复 Redirect 可能导致 Mixin 冲突，顺序执行的重复回调也可能重复触发第三方副作用。
 
-当前实现在 `BQReinjector` 中内置了 **50 ms 去抖（debounce）**：第二次调用如果距第一次不足 50 ms，直接跳过。此外，apply 逻辑（`ChapterApplier` / `QuestApplier`）本身也是幂等的（UUID 键 get-or-create + 覆盖写），即便去抖不存在，双重执行的结果也与单次相同。
-
-实际结论：
-
-| 场景 | 类冲突 | reinject 重复调用 | 功能结果 |
-|------|--------|-----------------|----------|
-| 主模组 jar + 一个 Shadow 模组 | ❌（类加载器去重） | 去抖消除 | ✅ 正常 |
-| 主模组 jar + 两个 Shadow 模组 | ❌ | 去抖消除 | ✅ 正常 |
-| 两个 Shadow 模组，无主模组 jar | ❌ | 去抖消除 | ✅ 正常 |
-| 多个 jar 版本不一致 | ❌ 类层面，但版本错误 | — | ⚠️ 不可预期 |
+正在执行时的重入请求会合并到当前轮次；已经完成的调用不再按时间间隔忽略，确保紧接着发生的真实数据库重载仍会执行。重载回调应保持幂等，类加载器对重复类名的处理也不能保证不同内嵌版本之间的兼容性。
 
 #### 建议
 
 整合包若将 BetterQuestingAPI 作为独立模组分发：
 - 所有下游模组均使用**方案二（外部模组依赖）**。
-- 各模组删除自己的 `MixinQuestCommandDefaults` 副本，由主模组 jar 统一管理。
+- 各模组删除自己的生命周期 mixin 副本，由主模组 jar 统一管理世界加载和默认任务重载。
 - 每个方法只有一次 mixin 注入、一次 `reinject` 调用，最简洁。

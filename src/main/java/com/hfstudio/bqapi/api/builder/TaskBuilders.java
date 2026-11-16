@@ -6,7 +6,7 @@ import com.hfstudio.bqapi.api.builder.task.OptionalRetrievalTaskBuilder;
 import com.hfstudio.bqapi.api.builder.task.RawTaskBuilder;
 import com.hfstudio.bqapi.api.builder.task.RetrievalTaskBuilder;
 
-public final class TaskBuilders {
+public class TaskBuilders {
 
     private TaskBuilders() {}
 

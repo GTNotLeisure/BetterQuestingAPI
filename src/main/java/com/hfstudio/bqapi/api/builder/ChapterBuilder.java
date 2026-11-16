@@ -15,7 +15,7 @@ import com.hfstudio.bqapi.runtime.BQStableIdFactory;
 import betterquesting.api.utils.BigItemStack;
 import betterquesting.api.utils.UuidConverter;
 
-public final class ChapterBuilder {
+public class ChapterBuilder {
 
     private final String id;
     private UUID uuid;
@@ -24,11 +24,11 @@ public final class ChapterBuilder {
     private NBTTagCompound templateNbt;
     private final List<QuestPlacementDefinition> placements = new ArrayList<>();
 
-    private ChapterBuilder(String id) {
+    protected ChapterBuilder(String id) {
         this.id = Objects.requireNonNull(id, "id");
     }
 
-    static ChapterBuilder chapter(String id) {
+    public static ChapterBuilder chapter(String id) {
         return new ChapterBuilder(id);
     }
 
@@ -38,11 +38,7 @@ public final class ChapterBuilder {
     }
 
     /**
-     * Orders this chapter to appear immediately after the chapter with the given UUID.
-     * This is a convenience wrapper around {@link #orderAfterEncoded(String)}.
-     *
-     * @param afterUuid the UUID of the chapter to appear after, or {@code null} to place at the start
-     * @return this builder
+     * Places this chapter after the given UUID. Passing {@code null} clears the ordering constraint.
      */
     public ChapterBuilder orderAfter(UUID afterUuid) {
         this.orderAfterEncoded = afterUuid == null ? null : UuidConverter.encodeUuid(afterUuid);
@@ -50,12 +46,8 @@ public final class ChapterBuilder {
     }
 
     /**
-     * Orders this chapter to appear immediately after the chapter with the given ID.
-     * The ID is converted to a UUID via {@link BQStableIdFactory#chapter(String)}.
-     * This is a convenience wrapper around {@link #orderAfter(UUID)}.
-     *
-     * @param afterId the ID of the chapter to appear after, or {@code null} to place at the start
-     * @return this builder
+     * Resolves the target with {@link BQStableIdFactory#chapter(String)}; {@code null} clears the constraint.
+     * Use the UUID overload for chapters registered with a custom UUID.
      */
     public ChapterBuilder orderAfter(String afterId) {
         return orderAfter(afterId == null ? null : BQStableIdFactory.chapter(afterId));

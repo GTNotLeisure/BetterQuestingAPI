@@ -11,34 +11,33 @@ import net.minecraft.server.MinecraftServer;
 
 import com.hfstudio.bqapi.api.QuestReloadService;
 import com.hfstudio.bqapi.api.QuestReloader;
+import com.hfstudio.bqapi.api.builder.Quests;
 import com.hfstudio.bqapi.api.definition.ChapterDefinition;
 import com.hfstudio.bqapi.api.definition.QuestDefinition;
 import com.hfstudio.bqapi.api.importer.ImportedQuestFolder;
 import com.hfstudio.bqapi.api.importer.ImportedQuestFolders;
 import com.hfstudio.bqapi.runtime.BQDefinitionRegistry;
-import com.hfstudio.bqapi.runtime.BQFileBackedOverrideResolver;
 import com.hfstudio.bqapi.runtime.BQRegistrationInfo;
 import com.hfstudio.bqapi.runtime.BQReloaderRegistry;
-import com.hfstudio.bqapi.runtime.BQRuntimeApplier;
+import com.hfstudio.bqapi.runtime.BQRuntime;
 import com.hfstudio.bqapi.runtime.BQStableIdFactory;
 import com.hfstudio.bqapi.runtime.importer.BQImportedQuestLoader;
 
-public final class BQApi {
+public class BQApi {
 
     private static final BQDefinitionRegistry REGISTRY = new BQDefinitionRegistry();
     private static final BQReloaderRegistry RELOADER_REGISTRY = new BQReloaderRegistry();
 
-    static {
-        // Auto-discover SPI reload participants from classpath.
-        RELOADER_REGISTRY.registerFromServiceLoader(BQApi.class.getClassLoader());
-    }
+    private static final BQRuntime RUNTIME = new BQRuntime(REGISTRY, RELOADER_REGISTRY);
 
     private BQApi() {}
 
-    // ---- Registration ----
-
     public static void register(ChapterDefinition chapter) {
         REGISTRY.register(chapter);
+    }
+
+    public static void registerAll(Collection<ChapterDefinition> chapters) {
+        REGISTRY.registerAll(chapters);
     }
 
     public static List<ChapterDefinition> importFolder(String modId, String rootPath) {
@@ -58,65 +57,37 @@ public final class BQApi {
     }
 
     public static void registerImportedFolder(ImportedQuestFolder folder) {
-        for (ChapterDefinition chapter : importFolder(folder)) {
-            register(chapter);
-        }
+        registerAll(importFolder(folder));
     }
 
-    // ---- Query: chapters ----
-
-    /**
-     * Returns the registered chapter with the given string ID,
-     * or {@link Optional#empty()} if no such chapter exists.
-     */
     public static Optional<ChapterDefinition> getChapter(String chapterId) {
         return REGISTRY.getChapter(chapterId);
     }
 
-    /**
-     * Returns the registered chapter with the given UUID,
-     * or {@link Optional#empty()} if no such chapter exists.
-     */
     public static Optional<ChapterDefinition> getChapter(UUID chapterUuid) {
         return REGISTRY.getChapter(chapterUuid);
     }
 
-    /** Returns {@code true} if a chapter with the given string ID has been registered. */
     public static boolean hasChapter(String chapterId) {
         return REGISTRY.hasChapter(chapterId);
     }
 
-    /** Returns {@code true} if a chapter with the given UUID has been registered. */
     public static boolean hasChapter(UUID chapterUuid) {
         return REGISTRY.hasChapter(chapterUuid);
     }
 
-    // ---- Query: quests ----
-
-    /**
-     * Returns the registered quest with the given UUID,
-     * or {@link Optional#empty()} if no such quest exists.
-     */
     public static Optional<QuestDefinition> getQuest(UUID questUuid) {
         return REGISTRY.getQuest(questUuid);
     }
 
-    /**
-     * Returns the registered quest with the given string ID,
-     * or {@link Optional#empty()} if no such quest exists.
-     * <p>
-     * The UUID is derived via {@link com.hfstudio.bqapi.runtime.BQStableIdFactory#quest(String)}.
-     */
     public static Optional<QuestDefinition> getQuest(String questId) {
         return REGISTRY.getQuest(questId);
     }
 
-    /** Returns {@code true} if a quest with the given UUID has been registered. */
     public static boolean hasQuest(UUID questUuid) {
         return REGISTRY.hasQuest(questUuid);
     }
 
-    /** Returns {@code true} if a quest with the given string ID has been registered. */
     public static boolean hasQuest(String questId) {
         return REGISTRY.hasQuest(questId);
     }
@@ -145,101 +116,67 @@ public final class BQApi {
         return REGISTRY.getSaveFilteredQuestUuids();
     }
 
-    /** Returns an unmodifiable view of all registered {@link ChapterDefinition}s. */
+    /**
+     * Returns an immutable snapshot, unaffected by later registrations.
+     */
     public static Collection<ChapterDefinition> getRegisteredChapters() {
         return REGISTRY.getChapters();
     }
 
-    // ---- Debug: registration metadata ----
-
     /**
-     * Returns the {@link BQRegistrationInfo} captured when the chapter with the given string ID
-     * was most recently registered via {@link #register}, or {@link Optional#empty()} if the
-     * chapter is not registered.
+     * Metadata from the chapter's latest registration.
      */
     public static Optional<BQRegistrationInfo> getChapterRegistrationInfo(String chapterId) {
         return REGISTRY.getChapterRegistrationInfo(chapterId);
     }
 
-    /**
-     * Returns the {@link BQRegistrationInfo} for the chapter identified by {@code chapterUuid},
-     * or {@link Optional#empty()} if the chapter is not registered.
-     */
     public static Optional<BQRegistrationInfo> getChapterRegistrationInfo(UUID chapterUuid) {
         return REGISTRY.getChapterRegistrationInfo(chapterUuid);
     }
 
     /**
-     * Returns the {@link BQRegistrationInfo} of the chapter that contains the quest with the
-     * given UUID, or {@link Optional#empty()} if the quest is not registered.
+     * Uses the containing chapter's registration metadata.
      */
     public static Optional<BQRegistrationInfo> getQuestRegistrationInfo(UUID questUuid) {
         return REGISTRY.getQuestChapterId(questUuid)
             .flatMap(REGISTRY::getChapterRegistrationInfo);
     }
 
-    /**
-     * Returns the {@link BQRegistrationInfo} of the chapter that contains the quest with the
-     * given string ID (UUID derived via {@link BQStableIdFactory#quest(String)}), or
-     * {@link Optional#empty()} if the quest is not registered.
-     */
     public static Optional<BQRegistrationInfo> getQuestRegistrationInfo(String questId) {
-        return getQuestRegistrationInfo(BQStableIdFactory.quest(questId));
+        return REGISTRY.getQuest(questId)
+            .flatMap(quest -> getQuestRegistrationInfo(quest.getUuid()));
     }
 
     /**
-     * Returns all {@link BQRegistrationInfo} snapshots captured each time
-     * {@link #patchQuest(UUID, java.util.function.UnaryOperator)} was called for the given quest UUID,
-     * in registration order. Returns an empty list if no patches have been registered.
+     * Patch sources in registration order, as an immutable snapshot.
      */
     public static List<BQRegistrationInfo> getQuestPatchRegistrationInfos(UUID questUuid) {
         return REGISTRY.getPatchRegistrationInfos(questUuid);
     }
 
-    /** Returns the number of quests that have at least one runtime patch registered. */
     public static int getPatchedQuestCount() {
         return REGISTRY.getPatchedQuestCount();
     }
 
-    // ---- Runtime patches ----
-
     /**
-     * Registers a runtime patch for the quest with the given UUID.
+     * Each reinjection starts from the registered definition and applies patches in registration order.
+     * Each patch receives the previous result; the registered definition remains unchanged.
      *
      * <p>
-     * On every {@link #reinject} call the original {@link QuestDefinition} is passed to
-     * {@code patchFn} and the returned value is written to BetterQuesting. The original
-     * registered data is never modified. Multiple patches on the same quest are applied in
-     * registration order.
+     * Register once at startup. Patches persist across reloads, so registering them in a reload
+     * callback adds another copy on every cycle.
      *
-     * <p>
-     * Typical usage (together with {@link com.hfstudio.bqapi.api.builder.Quests#copyOf}):
-     * 
-     * <pre>
-     * {@code
-     * BQApi.patchQuest(myQuestUuid, def ->
-     *     Quests.copyOf(def)
-     *         .task(TaskBuilders.retrieval().item(...).build())
-     *         .build());
-     * }
-     * </pre>
-     *
-     * <p>
-     * <strong>Register patches once at startup</strong>, not inside a
-     * {@link QuestReloader#reloadQuest()} method — patches are persistent and accumulate
-     * across reinject cycles.
-     *
-     * @param questUuid the UUID of the target quest
-     * @param patchFn   function that receives the current definition and returns the patched
-     *                  one; must not return {@code null}
+     * @param patchFn must return a non-null definition with the same ID and UUID
+     * @throws IllegalArgumentException during application if a patch changes the quest ID or UUID
+     * @see Quests#copyOf(QuestDefinition)
      */
     public static void patchQuest(UUID questUuid, UnaryOperator<QuestDefinition> patchFn) {
         REGISTRY.registerQuestPatch(questUuid, patchFn);
     }
 
     /**
-     * Registers a runtime patch for the quest with the given string ID
-     * (UUID derived via {@link BQStableIdFactory#quest(String)}).
+     * Targets the UUID derived by {@link BQStableIdFactory#quest(String)}.
+     * Use the UUID overload for quests registered with a custom UUID.
      *
      * @see #patchQuest(UUID, UnaryOperator)
      */
@@ -247,21 +184,10 @@ public final class BQApi {
         patchQuest(BQStableIdFactory.quest(questId), patchFn);
     }
 
-    // ---- Reload participants ----
-
     /**
-     * Registers a class as a reload participant. The class must:
-     * <ul>
-     * <li>Be annotated with {@link QuestReloader}.</li>
-     * <li>Declare a {@code public static void reloadQuest()} method.</li>
-     * </ul>
+     * Registers a public {@link QuestReloader} class declaring {@code public static void reloadQuest()}.
+     * Repeated registration of the same class is ignored.
      *
-     * <p>
-     * {@code reloadQuest()} is invoked at the start of every {@link #reinject} cycle,
-     * before definitions are written to BetterQuesting. Registering the same class more than
-     * once is a no-op.
-     *
-     * @param clazz the class to register
      * @throws IllegalArgumentException if the class does not satisfy the contract
      */
     public static void registerReloader(Class<?> clazz) {
@@ -269,22 +195,22 @@ public final class BQApi {
     }
 
     /**
-     * Registers a SPI reloader instance manually.
+     * Registers a service without SPI discovery. Only the first instance of each implementation class is used.
      *
-     * <p>
-     * Most mods should prefer Java SPI auto-discovery via
-     * {@code META-INF/services/com.hfstudio.bqapi.api.QuestReloadService}.
+     * @see QuestReloadService
      */
     public static void registerReloaderService(QuestReloadService service) {
         RELOADER_REGISTRY.registerService(service);
     }
 
-    // ---- Apply ----
+    public static BQRuntime getRuntime() {
+        return RUNTIME;
+    }
 
+    /**
+     * Applies registrations and synchronizes their scope on the owning server thread.
+     */
     public static void reinject(MinecraftServer server) {
-        // Invoke reload participants first so they can update registrations dynamically.
-        RELOADER_REGISTRY.invokeAll();
-        REGISTRY.setFileOverrideSnapshot(new BQFileBackedOverrideResolver().resolve(REGISTRY));
-        new BQRuntimeApplier(REGISTRY).applyAll(server);
+        RUNTIME.reinject(server);
     }
 }

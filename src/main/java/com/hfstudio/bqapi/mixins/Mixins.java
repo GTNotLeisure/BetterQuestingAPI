@@ -15,7 +15,7 @@ public enum Mixins {
     private final String requiredModId;
     private final String mixinClass;
 
-    Mixins(String requiredModId, String mixinClass) {
+    private Mixins(String requiredModId, String mixinClass) {
         this.requiredModId = requiredModId;
         this.mixinClass = mixinClass;
     }

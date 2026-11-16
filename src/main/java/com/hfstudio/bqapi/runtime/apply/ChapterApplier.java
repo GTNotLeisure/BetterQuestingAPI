@@ -1,5 +1,7 @@
 package com.hfstudio.bqapi.runtime.apply;
 
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
@@ -10,48 +12,51 @@ import com.hfstudio.bqapi.api.definition.QuestPlacementDefinition;
 
 import betterquesting.api.properties.NativeProps;
 import betterquesting.api.questing.IQuestLine;
+import betterquesting.api.questing.IQuestLineEntry;
 import betterquesting.api.utils.BigItemStack;
 import betterquesting.api.utils.JsonHelper;
 import betterquesting.api.utils.UuidConverter;
 import betterquesting.questing.QuestLineDatabase;
 import betterquesting.questing.QuestLineEntry;
 
-public final class ChapterApplier {
+public class ChapterApplier {
 
     public void apply(ChapterDefinition definition, Set<UUID> managedQuestUuids) {
+        NBTTagCompound template = definition.getTemplateNbt();
+        NBTTagCompound iconNbt = template == null ? definition.getIconNbt() : null;
+        BigItemStack icon = iconNbt == null ? null : JsonHelper.JsonToItemStack(iconNbt);
+        if (iconNbt != null && icon == null) {
+            throw new IllegalArgumentException("Unable to load chapter icon from NBT");
+        }
         IQuestLine chapter = QuestLineDatabase.INSTANCE.get(definition.getUuid());
         if (chapter == null) {
             chapter = QuestLineDatabase.INSTANCE.createNew(definition.getUuid());
         }
 
-        if (definition.getTemplateNbt() != null) {
-            chapter.readFromNBT(definition.getTemplateNbt());
+        Map<UUID, IQuestLineEntry> unmanagedPlacements = new LinkedHashMap<>();
+        for (Map.Entry<UUID, IQuestLineEntry> entry : chapter.entrySet()) {
+            if (!managedQuestUuids.contains(entry.getKey())) {
+                unmanagedPlacements.put(entry.getKey(), entry.getValue());
+            }
+        }
+        if (template != null) {
+            chapter.readFromNBT(template);
         } else {
             chapter.setProperty(NativeProps.NAME, definition.getId());
             chapter.setProperty(NativeProps.DESC, "");
-            if (definition.getIconNbt() != null) {
-                BigItemStack icon = JsonHelper.JsonToItemStack(
-                    (NBTTagCompound) definition.getIconNbt()
-                        .copy());
-                if (icon == null) {
-                    throw new IllegalArgumentException("Unable to load chapter icon from NBT");
-                }
+            if (icon != null) {
                 chapter.setProperty(NativeProps.ICON, icon);
             }
         }
         chapter.clear();
 
         for (QuestPlacementDefinition placement : definition.getPlacements()) {
-            if (!managedQuestUuids.contains(
-                placement.getQuest()
-                    .getUuid())) {
-                continue;
-            }
             chapter.put(
                 placement.getQuest()
                     .getUuid(),
                 new QuestLineEntry(placement.getX(), placement.getY(), placement.getSizeX(), placement.getSizeY()));
         }
+        unmanagedPlacements.forEach(chapter::putIfAbsent);
 
         int index = resolveOrderIndex(definition);
         if (index >= 0) {

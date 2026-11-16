@@ -7,7 +7,7 @@ import java.util.Objects;
 
 import net.minecraft.nbt.NBTTagCompound;
 
-public final class ItemRewardDefinition extends RewardDefinition {
+public class ItemRewardDefinition extends RewardDefinition {
 
     private final List<NBTTagCompound> items;
 

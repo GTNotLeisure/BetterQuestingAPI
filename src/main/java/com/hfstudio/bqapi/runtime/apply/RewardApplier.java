@@ -2,6 +2,7 @@ package com.hfstudio.bqapi.runtime.apply;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Objects;
 
 import net.minecraft.nbt.NBTTagCompound;
 
@@ -15,34 +16,22 @@ import betterquesting.api.utils.JsonHelper;
 import betterquesting.questing.rewards.RewardRegistry;
 import bq_standard.rewards.RewardItem;
 
-public final class RewardApplier {
+public class RewardApplier {
 
     public Map<Integer, IReward> buildRewards(Iterable<RewardDefinition> definitions) {
         Map<Integer, IReward> rewards = new LinkedHashMap<>();
-        int nextAutoSlot = 0;
-
-        for (RewardDefinition definition : definitions) {
-            int slot = definition.getSlot();
-            if (slot < 0) {
-                while (rewards.containsKey(nextAutoSlot)) {
-                    nextAutoSlot++;
-                }
-                slot = nextAutoSlot++;
-            }
-            if (rewards.containsKey(slot)) {
-                throw new IllegalArgumentException("Duplicate reward slot: " + slot);
-            }
-            rewards.put(slot, createReward(definition));
-        }
+        DefinitionSlots.assign(definitions, RewardDefinition::getSlot, "reward")
+            .forEach(
+                (slot, definition) -> rewards.put(slot, Objects.requireNonNull(createReward(definition), "reward")));
 
         return rewards;
     }
 
-    private IReward createReward(RewardDefinition definition) {
+    protected IReward createReward(RewardDefinition definition) {
         if (definition instanceof ItemRewardDefinition itemReward) {
             RewardItem reward = new RewardItem();
             for (NBTTagCompound itemNbt : itemReward.getItems()) {
-                BigItemStack stack = JsonHelper.JsonToItemStack((NBTTagCompound) itemNbt.copy());
+                BigItemStack stack = JsonHelper.JsonToItemStack(itemNbt);
                 if (stack == null) {
                     throw new IllegalArgumentException("Unable to load reward item from NBT");
                 }

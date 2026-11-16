@@ -16,27 +16,22 @@ import java.util.function.UnaryOperator;
 import com.hfstudio.bqapi.api.definition.ChapterDefinition;
 import com.hfstudio.bqapi.api.definition.QuestDefinition;
 
-public final class BQDefinitionRegistry {
+public class BQDefinitionRegistry {
 
     private final Map<String, ChapterDefinition> chapters = new LinkedHashMap<>();
     private final Map<UUID, String> chapterIdsByUuid = new LinkedHashMap<>();
     private final Map<UUID, BQImportedChapterSource> importedChapterSources = new LinkedHashMap<>();
 
-    // Quest index: rebuilt whenever a new chapter is registered.
     private final Map<UUID, QuestDefinition> questsByUuid = new LinkedHashMap<>();
     private final Map<String, QuestDefinition> questsById = new LinkedHashMap<>();
 
-    // Quest → containing chapter: rebuilt together with the quest index.
     private final Map<UUID, String> questChapterIdByUuid = new LinkedHashMap<>();
     private final Map<UUID, UUID> importedQuestChapterByQuestUuid = new LinkedHashMap<>();
 
-    // Runtime patch lists, applied in registration order during each reinject cycle.
     private final Map<UUID, List<UnaryOperator<QuestDefinition>>> questPatches = new LinkedHashMap<>();
 
-    // Debug: registration metadata captured at the time each chapter was registered.
     private final Map<String, BQRegistrationInfo> chapterRegInfo = new LinkedHashMap<>();
 
-    // Debug: registration metadata captured each time a quest patch was added.
     private final Map<UUID, List<BQRegistrationInfo>> questPatchRegInfo = new LinkedHashMap<>();
     private BQFileOverrideSnapshot fileOverrideSnapshot = BQFileOverrideSnapshot.empty();
     private Set<UUID> managedChapterUuids = Collections.emptySet();
@@ -45,8 +40,27 @@ public final class BQDefinitionRegistry {
     private Set<UUID> saveFilteredQuestUuids = Collections.emptySet();
 
     public synchronized void register(ChapterDefinition chapter) {
-        BQImportedChapterSource importedSource = chapter.getImportedSource();
-        ChapterDefinition value = Objects.requireNonNull(chapter, "chapter");
+        registerAll(Collections.singletonList(Objects.requireNonNull(chapter, "chapter")));
+    }
+
+    /**
+     * Registers a batch while rebuilding the derived indexes only once.
+     */
+    public synchronized void registerAll(Collection<ChapterDefinition> definitions) {
+        List<ChapterDefinition> values = List.copyOf(definitions);
+        if (values.isEmpty()) {
+            return;
+        }
+        BQRegistrationInfo registrationInfo = BQRegistrationInfo.capture();
+        for (ChapterDefinition chapter : values) {
+            registerChapter(chapter, registrationInfo);
+        }
+        rebuildQuestIndex();
+        refreshDerivedViews();
+    }
+
+    private void registerChapter(ChapterDefinition value, BQRegistrationInfo registrationInfo) {
+        BQImportedChapterSource importedSource = value.getImportedSource();
         String existingId = chapterIdsByUuid.get(value.getUuid());
         if (existingId != null && !existingId.equals(value.getId())) {
             chapters.remove(existingId);
@@ -65,16 +79,11 @@ public final class BQDefinitionRegistry {
         } else {
             importedChapterSources.remove(value.getUuid());
         }
-        chapterRegInfo.put(value.getId(), BQRegistrationInfo.capture());
-        rebuildQuestIndex();
-        refreshDerivedViews();
+        chapterRegInfo.put(value.getId(), registrationInfo);
     }
 
     /**
-     * Registers a runtime patch for the quest identified by {@code questUuid}.
-     * Patches are applied in registration order during each reinject cycle and
-     * do not modify the original registered data. Multiple patches may be added
-     * for the same quest.
+     * Patches persist across reinjection cycles and run in registration order.
      */
     public synchronized void registerQuestPatch(UUID questUuid, UnaryOperator<QuestDefinition> patch) {
         Objects.requireNonNull(questUuid, "questUuid");
@@ -86,20 +95,25 @@ public final class BQDefinitionRegistry {
     }
 
     /**
-     * Applies all registered patches for the given quest in registration order and
-     * returns the final result. Returns the quest unchanged if no patches are registered.
+     * Applies a snapshot of the patch chain outside the registry lock.
+     * Patches must preserve the quest ID and UUID.
      */
-    public synchronized QuestDefinition applyPatchesTo(QuestDefinition quest) {
+    public QuestDefinition applyPatchesTo(QuestDefinition quest) {
         Objects.requireNonNull(quest, "quest");
-        List<UnaryOperator<QuestDefinition>> patches = questPatches.get(quest.getUuid());
-        if (patches == null || patches.isEmpty()) {
-            return quest;
+        List<UnaryOperator<QuestDefinition>> patches;
+        synchronized (this) {
+            patches = new ArrayList<>(questPatches.getOrDefault(quest.getUuid(), Collections.emptyList()));
         }
-        QuestDefinition result = quest;
-        for (UnaryOperator<QuestDefinition> p : patches) {
-            result = Objects.requireNonNull(p.apply(result), "quest patch must not return null");
-        }
-        return result;
+        return BQDefinitionSnapshot.applyPatches(quest, patches);
+    }
+
+    public synchronized BQDefinitionSnapshot snapshot() {
+        return new BQDefinitionSnapshot(
+            new ArrayList<>(chapters.values()),
+            new ArrayList<>(questsByUuid.values()),
+            questPatches,
+            managedChapterUuids,
+            managedQuestUuids);
     }
 
     public synchronized Optional<ChapterDefinition> getChapter(String id) {
@@ -136,7 +150,7 @@ public final class BQDefinitionRegistry {
     }
 
     public synchronized Collection<ChapterDefinition> getChapters() {
-        return Collections.unmodifiableCollection(chapters.values());
+        return Collections.unmodifiableList(new ArrayList<>(chapters.values()));
     }
 
     public synchronized Set<UUID> getRegisteredChapterUuids() {
@@ -184,35 +198,27 @@ public final class BQDefinitionRegistry {
         refreshDerivedViews();
     }
 
-    /** Returns the registration info captured when the chapter with the given ID was registered. */
     public synchronized Optional<BQRegistrationInfo> getChapterRegistrationInfo(String chapterId) {
         return Optional.ofNullable(chapterRegInfo.get(chapterId));
     }
 
-    /** Returns the registration info for the chapter identified by {@code uuid}. */
     public synchronized Optional<BQRegistrationInfo> getChapterRegistrationInfo(UUID chapterUuid) {
         String id = chapterIdsByUuid.get(chapterUuid);
         return id == null ? Optional.empty() : getChapterRegistrationInfo(id);
     }
 
-    /**
-     * Returns the ID of the chapter that contains the quest with the given UUID,
-     * or {@link Optional#empty()} if the quest is not registered.
-     */
     public synchronized Optional<String> getQuestChapterId(UUID questUuid) {
         return Optional.ofNullable(questChapterIdByUuid.get(questUuid));
     }
 
     /**
-     * Returns all patch registration infos for the quest with the given UUID,
-     * in registration order. Returns an empty list if no patches have been registered.
+     * Patch sources in registration order, as an immutable snapshot.
      */
     public synchronized List<BQRegistrationInfo> getPatchRegistrationInfos(UUID questUuid) {
         List<BQRegistrationInfo> list = questPatchRegInfo.get(questUuid);
-        return list == null ? Collections.emptyList() : Collections.unmodifiableList(list);
+        return list == null ? Collections.emptyList() : Collections.unmodifiableList(new ArrayList<>(list));
     }
 
-    /** Returns the number of quests that have at least one runtime patch registered. */
     public synchronized int getPatchedQuestCount() {
         return questPatches.size();
     }
@@ -225,12 +231,16 @@ public final class BQDefinitionRegistry {
         for (ChapterDefinition chapter : chapters.values()) {
             for (QuestDefinition q : chapter.getAllQuests()) {
                 questsByUuid.put(q.getUuid(), q);
-                questsById.put(q.getId(), q);
                 questChapterIdByUuid.put(q.getUuid(), chapter.getId());
                 if (importedChapterSources.containsKey(chapter.getUuid())) {
                     importedQuestChapterByQuestUuid.put(q.getUuid(), chapter.getUuid());
+                } else {
+                    importedQuestChapterByQuestUuid.remove(q.getUuid());
                 }
             }
+        }
+        for (QuestDefinition quest : questsByUuid.values()) {
+            questsById.put(quest.getId(), quest);
         }
     }
 

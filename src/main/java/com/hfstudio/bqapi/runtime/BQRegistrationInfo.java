@@ -7,19 +7,8 @@ import java.util.List;
 import cpw.mods.fml.common.Loader;
 import cpw.mods.fml.common.ModContainer;
 
-/**
- * Immutable snapshot of the metadata captured when a chapter is registered via
- * {@link com.hfstudio.bqapi.BQApi#register}:
- * <ul>
- * <li>Caller class name and method name (first external stack frame).</li>
- * <li>The FML active mod's modId at registration time (best-effort; {@code "unknown"} if unavailable).</li>
- * <li>The call stack starting from the first external frame, capped at {@value #MAX_STACK_DEPTH} frames.</li>
- * <li>The system timestamp (milliseconds) when the registration occurred.</li>
- * </ul>
- */
-public final class BQRegistrationInfo {
+public class BQRegistrationInfo {
 
-    /** Maximum number of stack frames to retain, to limit memory usage. */
     private static final int MAX_STACK_DEPTH = 12;
     private static final String BQAPI_PKG = "com.hfstudio.bqapi";
 
@@ -41,12 +30,11 @@ public final class BQRegistrationInfo {
     }
 
     /**
-     * Captures registration metadata from the current thread's call stack.
-     * Skips all frames belonging to {@code com.hfstudio.bqapi}, {@code java.*}, and {@code sun.*};
-     * the first external frame is treated as the "registration source".
+     * Treats the first frame outside {@code com.hfstudio.bqapi}, {@code java.*}, and {@code sun.*}
+     * as the registration source.
      */
-    static BQRegistrationInfo capture() {
-        // Best-effort: read the FML active container modId (only reliable during mod init events).
+    public static BQRegistrationInfo capture() {
+        // FML's active mod is only reliable during mod initialization.
         String modId = "unknown";
         try {
             ModContainer active = Loader.instance()
@@ -58,7 +46,6 @@ public final class BQRegistrationInfo {
 
         StackTraceElement[] full = Thread.currentThread()
             .getStackTrace();
-        // full[0] = Thread.getStackTrace, full[1] = capture, full[2+] = callers
         StackTraceElement callerFrame = null;
         int externalStart = 0;
         for (int i = 0; i < full.length; i++) {
@@ -91,34 +78,41 @@ public final class BQRegistrationInfo {
             System.currentTimeMillis());
     }
 
-    /** Fully-qualified class name of the first external call frame. */
+    /**
+     * Fully-qualified class name of the first external call frame.
+     */
     public String getRegistrantClass() {
         return registrantClass;
     }
 
-    /** Method name of the first external call frame. */
     public String getRegistrantMethod() {
         return registrantMethod;
     }
 
-    /** Source line number of the first external call frame, or {@code -1} if unavailable. */
+    /**
+     * Source line number of the first external call frame, or {@code -1} if unavailable.
+     */
     public int getRegistrantLine() {
         return registrantLine;
     }
 
     /**
-     * The modId of the FML active mod at registration time; {@code "unknown"} if it could not be determined.
+     * FML's active mod ID, or {@code "unknown"} when unavailable.
      */
     public String getModId() {
         return modId;
     }
 
-    /** The call stack starting from the first external frame (unmodifiable view). */
+    /**
+     * Immutable stack from the registration source, capped at {@value #MAX_STACK_DEPTH} frames.
+     */
     public List<StackTraceElement> getStack() {
         return stack;
     }
 
-    /** System timestamp in milliseconds ({@link System#currentTimeMillis()}) when the registration occurred. */
+    /**
+     * Registration time in milliseconds since the Unix epoch.
+     */
     public long getRegistrationTimeMs() {
         return registrationTimeMs;
     }

@@ -1,6 +1,6 @@
 package com.hfstudio.bqapi.api.importer;
 
-public final class ImportedQuestFolders {
+public class ImportedQuestFolders {
 
     private ImportedQuestFolders() {}
 

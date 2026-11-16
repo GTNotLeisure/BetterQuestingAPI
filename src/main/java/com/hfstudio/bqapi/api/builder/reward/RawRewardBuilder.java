@@ -8,7 +8,7 @@ import net.minecraft.util.ResourceLocation;
 import com.hfstudio.bqapi.api.builder.RewardBuilder;
 import com.hfstudio.bqapi.api.definition.RawRewardDefinition;
 
-public final class RawRewardBuilder extends RewardBuilder<RawRewardDefinition, RawRewardBuilder> {
+public class RawRewardBuilder extends RewardBuilder<RawRewardDefinition, RawRewardBuilder> {
 
     private ResourceLocation factoryId;
     private NBTTagCompound configNbt = new NBTTagCompound();

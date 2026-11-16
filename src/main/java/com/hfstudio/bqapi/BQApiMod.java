@@ -1,18 +1,15 @@
 package com.hfstudio.bqapi;
 
 import com.hfstudio.bqapi.command.BQApiCommand;
-import com.hfstudio.bqapi.runtime.BQReinjector;
 
-import cpw.mods.fml.common.FMLCommonHandler;
 import cpw.mods.fml.common.Mod;
-import cpw.mods.fml.common.event.FMLServerStartedEvent;
 import cpw.mods.fml.common.event.FMLServerStartingEvent;
 
 @Mod(
     modid = BQApiMod.MODID,
     name = "BetterQuesting Runtime API",
     version = BQApiMod.VERSION,
-    dependencies = "after:betterquesting;",
+    dependencies = "required-after:betterquesting;",
     acceptableRemoteVersions = "*",
     acceptedMinecraftVersions = "1.7.10")
 public class BQApiMod {
@@ -25,10 +22,4 @@ public class BQApiMod {
         event.registerServerCommand(new BQApiCommand());
     }
 
-    @Mod.EventHandler
-    public void onServerStarted(FMLServerStartedEvent event) {
-        BQReinjector.reinject(
-            FMLCommonHandler.instance()
-                .getMinecraftServerInstance());
-    }
 }

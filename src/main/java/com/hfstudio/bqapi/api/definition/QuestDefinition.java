@@ -15,7 +15,7 @@ import com.hfstudio.bqapi.runtime.BQStableIdFactory;
 
 import betterquesting.api.questing.IQuest;
 
-public final class QuestDefinition {
+public class QuestDefinition {
 
     private final String id;
     private final UUID uuid;

@@ -5,7 +5,7 @@ import java.util.Objects;
 import net.minecraft.nbt.NBTTagCompound;
 import net.minecraft.util.ResourceLocation;
 
-public final class RawRewardDefinition extends RewardDefinition {
+public class RawRewardDefinition extends RewardDefinition {
 
     private final ResourceLocation factoryId;
     private final NBTTagCompound configNbt;

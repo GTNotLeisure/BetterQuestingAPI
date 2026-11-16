@@ -10,6 +10,8 @@ import org.junit.Test;
 
 import com.hfstudio.bqapi.BQApiLangKeys;
 
+import betterquesting.api.utils.UuidConverter;
+
 public class BQStableIdFactoryTest {
 
     @Test
@@ -26,10 +28,10 @@ public class BQStableIdFactoryTest {
     public void questLangKeysFollowBetterQuestingFormat() {
         UUID quest = BQStableIdFactory.quest("gtnl:large_steam_furnace");
         assertEquals(
-            "betterquesting.quest." + betterquesting.api.utils.UuidConverter.encodeUuidStripPadding(quest) + ".name",
+            "betterquesting.quest." + UuidConverter.encodeUuidStripPadding(quest) + ".name",
             BQApiLangKeys.questName(quest));
         assertEquals(
-            "betterquesting.quest." + betterquesting.api.utils.UuidConverter.encodeUuidStripPadding(quest) + ".desc",
+            "betterquesting.quest." + UuidConverter.encodeUuidStripPadding(quest) + ".desc",
             BQApiLangKeys.questDesc(quest));
     }
 

@@ -15,7 +15,7 @@ import com.hfstudio.bqapi.runtime.importer.BQImportedQuestLoader;
 import betterquesting.api.utils.BigItemStack;
 import betterquesting.api.utils.UuidConverter;
 
-public final class ImportedChapterBuilder {
+public class ImportedChapterBuilder {
 
     private final String id;
     private ImportedQuestFolder folder;
@@ -25,7 +25,7 @@ public final class ImportedChapterBuilder {
     private String orderAfterEncoded;
     private NBTTagCompound iconNbt;
 
-    ImportedChapterBuilder(String id) {
+    public ImportedChapterBuilder(String id) {
         this.id = Objects.requireNonNull(id, "id");
     }
 
@@ -61,11 +61,7 @@ public final class ImportedChapterBuilder {
     }
 
     /**
-     * Orders this chapter to appear immediately after the chapter with the given UUID.
-     * This is a convenience wrapper around {@link #orderAfterEncoded(String)}.
-     *
-     * @param afterUuid the UUID of the chapter to appear after, or {@code null} to place at the start
-     * @return this builder
+     * Places this chapter after the given UUID. Passing {@code null} clears the ordering constraint.
      */
     public ImportedChapterBuilder orderAfter(UUID afterUuid) {
         this.orderAfterEncoded = afterUuid == null ? null : UuidConverter.encodeUuid(afterUuid);
@@ -73,12 +69,8 @@ public final class ImportedChapterBuilder {
     }
 
     /**
-     * Orders this chapter to appear immediately after the chapter with the given ID.
-     * The ID is converted to a UUID via {@link BQStableIdFactory#chapter(String)}.
-     * This is a convenience wrapper around {@link #orderAfter(UUID)}.
-     *
-     * @param afterId the ID of the chapter to appear after, or {@code null} to place at the start
-     * @return this builder
+     * Resolves the target with {@link BQStableIdFactory#chapter(String)}; {@code null} clears the constraint.
+     * Use the UUID overload for chapters registered with a custom UUID.
      */
     public ImportedChapterBuilder orderAfter(String afterId) {
         return orderAfter(afterId == null ? null : BQStableIdFactory.chapter(afterId));

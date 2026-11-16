@@ -14,7 +14,7 @@ import com.hfstudio.bqapi.BQApiLangKeys;
 import com.hfstudio.bqapi.runtime.BQImportedChapterSource;
 import com.hfstudio.bqapi.runtime.BQStableIdFactory;
 
-public final class ChapterDefinition {
+public class ChapterDefinition {
 
     private final String id;
     private final UUID uuid;
